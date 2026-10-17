@@ -25,6 +25,10 @@
 .DS_Store
 *.pem
 
+# confidential reference material (kept outside the repository)
+/How long Calculator.xlsx
+/Web Application Project.pdf
+
 # debug
 npm-debug.log*
 yarn-debug.log*
