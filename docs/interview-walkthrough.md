@@ -4,7 +4,7 @@ Use this as a speaking guide, not a script to memorise. Open the actual code and
 
 ## The one-minute architecture story
 
-The Next.js App Router page renders an interactive React dashboard. The user edits a local form; the dashboard parses and validates those values, calls a pure TypeScript function, and passes the resulting 51 annual rows to both the summary cards and the Recharts graph/table. There is no server-side financial state and no database because scenarios are not saved. Keeping the engine separate from React makes it straightforward to test against Excel.
+The Next.js App Router page renders an interactive React dashboard with empty inputs for the client. The user edits a local form; the dashboard parses and validates those values, calls a pure TypeScript function, and passes the resulting 51 annual rows to both the summary cards and the Recharts graph/table. Load example is optional and Clear starts a fresh scenario. There is no server-side financial state and no database because scenarios are not saved. Keeping the engine separate from React makes it straightforward to test against Excel.
 
 The relevant files are `src/lib/calculator.ts`, `src/components/calculator-dashboard.tsx`, `src/components/balance-chart.tsx`, and `src/components/projection-table.tsx`.
 
@@ -30,9 +30,9 @@ Excel does not model the exact month when funds run out. It computes the full an
 
 ## How we proved it
 
-The default golden test checks every financial column in workbook Years 0–21 to within half a cent, followed by the remaining zero-balance rows. Alternative inputs were applied to temporary copies of the workbook and recalculated in Excel, then captured as test fixtures. `npm run parity` prints Excel, app, difference, and pass/fail side by side. Cases include zero and negative returns, zero inflation, no withdrawals, early depletion, survival through Year 50, and one-off events. The source PDF and XLSX are deliberately not in the repository.
+The complete golden suite checks all six financial columns in all 51 annual rows across 19 scenarios recalculated in Excel: 5,814 monetary comparisons, plus the shortfall years. It checks both a raw difference below half a cent and identical displayed cents. `npm run parity` prints the scenario results with Excel/app/difference examples; `npm run parity -- --details` prints every amount. Separate component tests edit every main input and event control, then check the displayed rows and the data passed to the chart. The source PDF and XLSX are deliberately not in the repository.
 
-When explaining numerical accuracy, distinguish **parity at displayed-cent precision** from mathematically exact arithmetic. JavaScript uses binary floating point, and Excel does too. We do not round each year; we compare monetary outputs within half a cent and format only for display. For production financial transactions requiring exact accounting, decimal arithmetic and a separate money policy would be appropriate—but they could introduce discrepancies with this Excel model.
+When explaining numerical accuracy, distinguish **parity at displayed-cent precision** from mathematically exact arithmetic. JavaScript uses binary floating point, and Excel does too. The audit found that JavaScript's general power operation could round differently from Excel on integer powers. The engine uses repeated squaring for those powers; this reproduced every raw monetary value in the 19 checked Excel scenarios and removed cent-display mismatches at rounding boundaries. We still test future changes against the fixtures instead of assuming that mathematical equivalence guarantees identical rounding. For financial transactions requiring exact accounting, decimal arithmetic and a separate money policy would be appropriate, but would require their own validation against this model.
 
 ## Deployment story
 

@@ -39,6 +39,7 @@ export type Projection = {
   depletionEndYear: number | null;
 };
 
+/** Optional reference scenario for examples and tests; client projections use their submitted inputs. */
 export const defaultInputs: CalculatorInputs = {
   startingBalance: 1_650_000,
   annualReturn: 0.075,
@@ -94,6 +95,23 @@ export function validateInputs(inputs: CalculatorInputs): string[] {
   return errors;
 }
 
+/**
+ * Match Excel's integer-power rounding using repeated squaring.
+ * Math.pow can differ by a few binary units, enough to cross a half-cent boundary
+ * after compounding. The caller supplies a non-negative integer exponent.
+ */
+function integerPower(base: number, exponent: number): number {
+  let result = 1;
+  let factor = base;
+  let remaining = exponent;
+  while (remaining > 0) {
+    if (remaining % 2 === 1) result *= factor;
+    remaining = Math.floor(remaining / 2);
+    if (remaining > 0) factor *= factor;
+  }
+  return result;
+}
+
 /** Mirrors Excel FV(rate, 12, payment, -opening) with end-of-month payments. */
 function endOfYearBalance(
   opening: number,
@@ -104,7 +122,7 @@ function endOfYearBalance(
     return opening - monthlyWithdrawal * 12;
   }
 
-  const growth = (1 + monthlyRate) ** 12;
+  const growth = integerPower(1 + monthlyRate, 12);
   return opening * growth - monthlyWithdrawal * ((growth - 1) / monthlyRate);
 }
 
@@ -152,12 +170,13 @@ export function calculateProjection(inputs: CalculatorInputs): Projection {
       year,
       endYear: year + 1,
       openingBalance,
-      openingTodayValue: openingBalance / inflationFactor ** year,
+      openingTodayValue: openingBalance / integerPower(inflationFactor, year),
       regularWithdrawals,
       lumpSumWithdrawals: withdrawal,
       lumpSumWindfalls: windfall,
       closingBalance,
-      closingTodayValue: closingBalance / inflationFactor ** (year + 1),
+      closingTodayValue:
+        closingBalance / integerPower(inflationFactor, year + 1),
     };
 
     if (

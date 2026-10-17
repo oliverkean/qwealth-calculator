@@ -11,7 +11,7 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Change the four assumptions or add end-of-year withdrawals and windfalls; results update immediately. Reset restores the workbook defaults.
+Open [http://localhost:3000](http://localhost:3000). The calculator starts with empty fields for each client's balance, return, inflation, monthly withdrawal, and optional end-of-year events. Every result is calculated from those entered values. Load example fills the optional spreadsheet reference scenario; Clear starts a fresh scenario with no inherited values or events.
 
 ## Verify the implementation
 
@@ -20,7 +20,7 @@ npm run check       # ESLint, TypeScript, Vitest, production build
 npm run parity      # Excel vs app values, differences, and cent-level pass/fail
 ```
 
-The engine tests compare all six financial columns in every default workbook row through depletion (Years 0–21), then assert the post-depletion behavior. Additional fixtures were recalculated in Excel from temporary copies of the original workbook for zero return/inflation/withdrawals, other starting balances, lump sums, negative returns, early depletion, survival through Year 50, and post-depletion windfalls. Tests compare unrounded app output with Excel to within half a cent. The parity command prints a human-readable subset of those comparisons.
+The engine tests compare all six financial columns across all 51 rows in 19 scenarios recalculated in Excel: 969 rows and 5,814 monetary comparisons. They check both unrounded differences below half a cent and identical formatted cents, together with the shortfall year. Cases include fractional amounts, large balances, zero and negative rates, and one-off events. Component tests verify that user edits update the summary, annual rows, and chart data. The parity command prints a report for every scenario; use `npm run parity -- --details` for every individual comparison.
 
 ## How the model works
 
@@ -34,7 +34,7 @@ The workbook has 51 rows, labelled Year 0 through Year 50. Year 0 is the **first
 | F/G — Lump sums           | `lumpSumWithdrawals` / `lumpSumWindfalls` | Events for that end year, applied after monthly investment growth and regular withdrawals                                          |
 | H — Balance at end        | `closingBalance`                          | Excel `FV(monthlyRate, 12, regularWithdrawals / 12, -openingBalance) - lumpWithdrawals + windfalls`                                |
 
-The effective monthly rate is `(1 + annualReturn)^(1/12) - 1`. `FV` assumes the regular withdrawal is taken at the **end** of each month. At a zero monthly rate, the engine uses `openingBalance - regularWithdrawals`, avoiding division by zero. No intermediate values are rounded; AUD formatting occurs only in the UI.
+The effective monthly rate is `(1 + annualReturn)^(1/12) - 1`. `FV` assumes the regular withdrawal is taken at the **end** of each month. At a zero monthly rate, the engine uses `openingBalance - regularWithdrawals`, avoiding division by zero. Integer exponents use repeated squaring to match Excel's binary rounding; using JavaScript's general power operation can cross a displayed half-cent boundary for some amounts. No intermediate values are rounded to cents; AUD formatting occurs only in the UI.
 
 The chart's nominal line uses column H directly. Its dashed inflation-adjusted **closing** line is a derived view: closing balance ÷ `(1 + inflation)^(endYear)`. The workbook itself provides today's-dollar **opening** value in column D; the annual table shows that exact workbook value.
 
@@ -51,10 +51,14 @@ The chart's nominal line uses column H directly. Its dashed inflation-adjusted *
 - `src/lib/calculator.ts`: pure, deterministic calculation, types, defaults, and input validation. No React or browser dependencies.
 - `src/components/calculator-dashboard.tsx`: local form state, field feedback, and result composition. Data stays in the browser; no account, API, or database is needed.
 - `src/components/balance-chart.tsx`: Recharts visualization, dynamically loaded so the chart bundle is separate from the static page.
-- `src/components/projection-table.tsx`: exact annual values in an accessible, horizontally scrollable table.
+- `src/components/projection-table.tsx`: full-width desktop table and expandable year cards on narrow screens, with the same fields and values and no horizontal-scroll requirement.
 - `src/lib/calculator.test.ts`: Excel golden fixtures and edge cases.
+- `src/lib/calculator-excel.test.ts`: complete annual comparisons across 19 Excel-recalculated scenarios.
+- `scripts/extract-excel-fixtures.ps1`: reproduces fixture extraction using installed Windows Excel on a temporary workbook copy.
 - `scripts/parity-report.mjs`: readable Excel/app/difference report.
 - `docs/interview-walkthrough.md`: a code-based explanation and interview practice questions.
+- `docs/calculator-flow.md`: flowchart of validation, calculation, and live results.
+- `docs/functional-requirements.md`: requirement-by-requirement implementation and verification evidence.
 
 The original confidential PDF and workbook remain outside this repository. Do **not** add them to `public/`, commit them, or upload them to a deployment. The app does not read or transmit user scenarios to a server.
 
