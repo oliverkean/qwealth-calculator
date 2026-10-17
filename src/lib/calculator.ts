@@ -1,11 +1,12 @@
-/** The workbook projects Year 0 through Year 50 (51 twelve-month periods). */
+/** Project 51 twelve-month periods, labelled Year 0 through Year 50. */
 export const PROJECTION_YEARS = 51;
+const MONTHS_PER_YEAR = 12;
 
 export type EventType = "withdrawal" | "windfall";
 
 export type LumpSumEvent = {
   id: string;
-  /** A human-facing year: 1 is applied at the end of workbook Year 0. */
+  /** 1 means the end of the first twelve months. */
   endYear: number;
   type: EventType;
   amount: number;
@@ -20,7 +21,7 @@ export type CalculatorInputs = {
 };
 
 export type ProjectionRow = {
-  /** Workbook Year, zero-indexed. */
+  /** Zero-based year: 0 covers the first twelve months. */
   year: number;
   endYear: number;
   openingBalance: number;
@@ -29,7 +30,7 @@ export type ProjectionRow = {
   lumpSumWithdrawals: number;
   lumpSumWindfalls: number;
   closingBalance: number;
-  /** Derived for the chart; not a column in the reference workbook. */
+  /** Year-end balance expressed in today's purchasing power. */
   closingTodayValue: number;
 };
 
@@ -39,7 +40,7 @@ export type Projection = {
   depletionEndYear: number | null;
 };
 
-/** Optional reference scenario for examples and tests; client projections use their submitted inputs. */
+/** Optional values for the Load example action. */
 export const defaultInputs: CalculatorInputs = {
   startingBalance: 1_650_000,
   annualReturn: 0.075,
@@ -95,95 +96,66 @@ export function validateInputs(inputs: CalculatorInputs): string[] {
   return errors;
 }
 
-/**
- * Match Excel's integer-power rounding using repeated squaring.
- * Math.pow can differ by a few binary units, enough to cross a half-cent boundary
- * after compounding. The caller supplies a non-negative integer exponent.
- */
-function integerPower(base: number, exponent: number): number {
-  let result = 1;
-  let factor = base;
-  let remaining = exponent;
-  while (remaining > 0) {
-    if (remaining % 2 === 1) result *= factor;
-    remaining = Math.floor(remaining / 2);
-    if (remaining > 0) factor *= factor;
-  }
-  return result;
-}
-
-/** Mirrors Excel FV(rate, 12, payment, -opening) with end-of-month payments. */
-function endOfYearBalance(
-  opening: number,
-  monthlyWithdrawal: number,
-  monthlyRate: number,
-): number {
-  if (monthlyRate === 0) {
-    return opening - monthlyWithdrawal * 12;
-  }
-
-  const growth = integerPower(1 + monthlyRate, 12);
-  return opening * growth - monthlyWithdrawal * ((growth - 1) / monthlyRate);
-}
-
 export function calculateProjection(inputs: CalculatorInputs): Projection {
   const errors = validateInputs(inputs);
   if (errors.length > 0) {
     throw new RangeError(errors.join(" "));
   }
 
-  const monthlyRate = (1 + inputs.annualReturn) ** (1 / 12) - 1;
+  const monthlyRate = (1 + inputs.annualReturn) ** (1 / MONTHS_PER_YEAR) - 1;
   const inflationFactor = 1 + inputs.annualInflation;
-  const eventTotals = Array.from({ length: PROJECTION_YEARS }, () => ({
-    withdrawal: 0,
-    windfall: 0,
-  }));
-
-  for (const event of inputs.events) {
-    eventTotals[event.endYear - 1][event.type] += event.amount;
-  }
-
+  const eventsByYear = groupEventsByYear(inputs.events);
   const rows: ProjectionRow[] = [];
   let depletionEndYear: number | null = null;
 
   for (let year = 0; year < PROJECTION_YEARS; year += 1) {
-    const previous = rows[year - 1];
-    // The workbook retains the first negative closing figure, then resets next year's opening to zero.
-    const openingBalance =
-      year === 0
-        ? inputs.startingBalance
-        : previous.closingBalance < 0
-          ? 0
-          : previous.closingBalance;
-    const regularWithdrawals =
-      year === 0
-        ? inputs.monthlyWithdrawal * 12
-        : openingBalance > 0
-          ? previous.regularWithdrawals * inflationFactor
-          : openingBalance;
-    const { withdrawal, windfall } = eventTotals[year];
+    const endYear = year + 1;
+    const previousRow = rows[year - 1];
+    let openingBalance = inputs.startingBalance;
+    let regularWithdrawals = inputs.monthlyWithdrawal * MONTHS_PER_YEAR;
+
+    if (previousRow) {
+      openingBalance = previousRow.closingBalance;
+      if (openingBalance < 0) {
+        openingBalance = 0;
+      }
+
+      if (openingBalance > 0) {
+        regularWithdrawals = previousRow.regularWithdrawals * inflationFactor;
+      } else {
+        regularWithdrawals = openingBalance;
+      }
+    }
+
+    const monthlyWithdrawal = regularWithdrawals / MONTHS_PER_YEAR;
+    const balanceAfterRegularWithdrawals = applyGrowthAndMonthlyWithdrawals(
+      openingBalance,
+      monthlyWithdrawal,
+      monthlyRate,
+    );
+    const { lumpSumWithdrawals, lumpSumWindfalls } = eventsByYear[year];
+
+    // One-off events happen after all twelve monthly periods.
     const closingBalance =
-      endOfYearBalance(openingBalance, regularWithdrawals / 12, monthlyRate) -
-      withdrawal +
-      windfall;
+      balanceAfterRegularWithdrawals - lumpSumWithdrawals + lumpSumWindfalls;
     const row: ProjectionRow = {
       year,
-      endYear: year + 1,
+      endYear,
       openingBalance,
-      openingTodayValue: openingBalance / integerPower(inflationFactor, year),
+      openingTodayValue:
+        openingBalance / wholePeriodPower(inflationFactor, year),
       regularWithdrawals,
-      lumpSumWithdrawals: withdrawal,
-      lumpSumWindfalls: windfall,
+      lumpSumWithdrawals,
+      lumpSumWindfalls,
       closingBalance,
       closingTodayValue:
-        closingBalance / integerPower(inflationFactor, year + 1),
+        closingBalance / wholePeriodPower(inflationFactor, endYear),
     };
 
-    if (
-      Object.values(row).some(
-        (value) => typeof value === "number" && !Number.isFinite(value),
-      )
-    ) {
+    const hasNonFiniteValue = Object.values(row).some(
+      (value) => typeof value === "number" && !Number.isFinite(value),
+    );
+    if (hasNonFiniteValue) {
       throw new RangeError(
         "This scenario exceeds the calculator's numeric range.",
       );
@@ -191,9 +163,64 @@ export function calculateProjection(inputs: CalculatorInputs): Projection {
 
     rows.push(row);
     if (depletionEndYear === null && closingBalance <= 0) {
-      depletionEndYear = year + 1;
+      depletionEndYear = endYear;
     }
   }
 
   return { rows, depletionEndYear };
+}
+
+function groupEventsByYear(events: LumpSumEvent[]) {
+  const totals = Array.from({ length: PROJECTION_YEARS }, () => ({
+    lumpSumWithdrawals: 0,
+    lumpSumWindfalls: 0,
+  }));
+
+  for (const event of events) {
+    const yearTotals = totals[event.endYear - 1];
+    if (event.type === "withdrawal") {
+      yearTotals.lumpSumWithdrawals += event.amount;
+    } else {
+      yearTotals.lumpSumWindfalls += event.amount;
+    }
+  }
+
+  return totals;
+}
+
+/** Apply growth followed by a withdrawal at the end of each month. */
+function applyGrowthAndMonthlyWithdrawals(
+  openingBalance: number,
+  monthlyWithdrawal: number,
+  monthlyRate: number,
+): number {
+  if (monthlyRate === 0) {
+    return openingBalance - monthlyWithdrawal * MONTHS_PER_YEAR;
+  }
+
+  const annualGrowthFactor = wholePeriodPower(1 + monthlyRate, MONTHS_PER_YEAR);
+  const balanceWithGrowth = openingBalance * annualGrowthFactor;
+  const withdrawalGrowthFactor = (annualGrowthFactor - 1) / monthlyRate;
+  const withdrawalsAtYearEnd = monthlyWithdrawal * withdrawalGrowthFactor;
+
+  return balanceWithGrowth - withdrawalsAtYearEnd;
+}
+
+/** Keep the multiplication order stable to preserve cent rounding over whole periods. */
+function wholePeriodPower(base: number, exponent: number): number {
+  let result = 1;
+  let factor = base;
+  let remainingExponent = exponent;
+
+  while (remainingExponent > 0) {
+    if (remainingExponent % 2 === 1) {
+      result *= factor;
+    }
+    remainingExponent = Math.floor(remainingExponent / 2);
+    if (remainingExponent > 0) {
+      factor *= factor;
+    }
+  }
+
+  return result;
 }

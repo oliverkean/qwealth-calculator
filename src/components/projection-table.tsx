@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import type { ProjectionRow } from "@/lib/calculator";
 
 const money = new Intl.NumberFormat("en-AU", {
@@ -17,10 +20,45 @@ const columns = [
 ] as const;
 
 export function ProjectionTable({ rows }: { rows: ProjectionRow[] }) {
+  const [pageSize, setPageSize] = useState(10);
+  const [pageIndex, setPageIndex] = useState(0);
+  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
+  const currentPage = Math.min(pageIndex, pageCount - 1);
+  const firstRowIndex = currentPage * pageSize;
+  const visibleRows = rows.slice(firstRowIndex, firstRowIndex + pageSize);
+  const pageButtonClass =
+    "min-h-11 rounded-lg border border-line bg-white px-4 text-sm font-semibold transition-colors hover:border-orange hover:text-orange focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line disabled:hover:text-ink";
+
   return (
     <>
-      <div className="hidden rounded-2xl border border-line bg-white xl:block">
-        <table className="w-full table-fixed border-collapse text-right text-sm tabular-nums">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-sm">
+        <p role="status" aria-live="polite" className="text-muted">
+          Showing years {visibleRows[0]?.year ?? 0}–
+          {visibleRows.at(-1)?.year ?? 0} of {rows.length}
+        </p>
+        <label className="flex items-center gap-3 font-medium">
+          Years per page
+          <select
+            value={pageSize}
+            onChange={(event) => {
+              setPageSize(Number(event.target.value));
+              setPageIndex(0);
+            }}
+            className="min-h-11 rounded-lg border border-line bg-white px-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange"
+          >
+            <option value={10}>10</option>
+            <option value={25}>25</option>
+            <option value={51}>All 51</option>
+          </select>
+        </label>
+      </div>
+      <div
+        role="region"
+        aria-label="Scrollable annual projection table"
+        tabIndex={0}
+        className="hidden overflow-x-auto rounded-2xl border border-line bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange xl:block"
+      >
+        <table className="w-full min-w-[880px] border-collapse text-right text-sm tabular-nums">
           <caption className="sr-only">
             Annual projection in AUD. Year 0 covers the first 12 months.
           </caption>
@@ -37,7 +75,7 @@ export function ProjectionTable({ rows }: { rows: ProjectionRow[] }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {visibleRows.map((row) => (
               <tr
                 key={row.year}
                 className="border-t border-line text-ink even:bg-[#fcfbf9] hover:bg-[#fff6ef]"
@@ -48,7 +86,7 @@ export function ProjectionTable({ rows }: { rows: ProjectionRow[] }) {
                 {columns.map((column) => (
                   <td
                     key={column.key}
-                    className={`px-3 py-3 [overflow-wrap:anywhere] ${column.key === "closingBalance" ? "font-bold" : ""} ${column.key === "closingBalance" && row.closingBalance < 0 ? "text-[#a92f19]" : "text-ink"}`}
+                    className={`whitespace-nowrap px-3 py-3 ${column.key === "closingBalance" ? "font-bold" : ""} ${column.key === "closingBalance" && row.closingBalance < 0 ? "text-[#a92f19]" : "text-ink"}`}
                   >
                     {money.format(row[column.key])}
                   </td>
@@ -62,10 +100,10 @@ export function ProjectionTable({ rows }: { rows: ProjectionRow[] }) {
         className="grid min-w-0 gap-3 sm:grid-cols-2 xl:hidden"
         aria-label="Annual projection by year"
       >
-        {rows.map((row) => (
+        {visibleRows.map((row) => (
           <details
             key={row.year}
-            open={row.year === 0}
+            open={row.year === visibleRows[0]?.year}
             className="min-w-0 self-start rounded-xl border border-line bg-white"
           >
             <summary className="min-h-14 cursor-pointer rounded-xl px-4 py-4 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange">
@@ -94,6 +132,30 @@ export function ProjectionTable({ rows }: { rows: ProjectionRow[] }) {
           </details>
         ))}
       </div>
+      <nav
+        aria-label="Annual projection pages"
+        className="mt-4 flex flex-wrap items-center justify-between gap-3"
+      >
+        <button
+          type="button"
+          disabled={currentPage === 0}
+          onClick={() => setPageIndex(currentPage - 1)}
+          className={pageButtonClass}
+        >
+          Previous
+        </button>
+        <span className="text-sm tabular-nums text-muted">
+          Page {currentPage + 1} of {pageCount}
+        </span>
+        <button
+          type="button"
+          disabled={currentPage === pageCount - 1}
+          onClick={() => setPageIndex(currentPage + 1)}
+          className={pageButtonClass}
+        >
+          Next
+        </button>
+      </nav>
     </>
   );
 }

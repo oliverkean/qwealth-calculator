@@ -88,23 +88,49 @@ function getFieldErrors(form: FormState): Record<string, string> {
   const errors: Record<string, string> = {};
   for (const field of ["startingBalance", "monthlyWithdrawal"] as const) {
     const value = readNumber(form[field]);
-    if (!Number.isFinite(value) || value < 0)
-      errors[field] = "Enter an amount of $0 or more.";
+    if (form[field].trim() === "") {
+      errors[field] =
+        field === "startingBalance"
+          ? "Enter a starting balance."
+          : "Enter a monthly withdrawal.";
+    } else if (!Number.isFinite(value)) {
+      errors[field] = "Enter a valid amount.";
+    } else if (value < 0) {
+      errors[field] = "Amount cannot be negative.";
+    }
   }
   const annualReturn = readNumber(form.annualReturn);
-  if (!Number.isFinite(annualReturn) || annualReturn < -100)
-    errors.annualReturn = "Enter a return of -100% or more.";
+  if (form.annualReturn.trim() === "") {
+    errors.annualReturn = "Enter an annual return.";
+  } else if (!Number.isFinite(annualReturn)) {
+    errors.annualReturn = "Enter a valid percentage.";
+  } else if (annualReturn < -100) {
+    errors.annualReturn = "Return cannot be below -100%.";
+  }
   const annualInflation = readNumber(form.annualInflation);
-  if (!Number.isFinite(annualInflation) || annualInflation <= -100)
-    errors.annualInflation = "Enter inflation greater than -100%.";
+  if (form.annualInflation.trim() === "") {
+    errors.annualInflation = "Enter an inflation rate.";
+  } else if (!Number.isFinite(annualInflation)) {
+    errors.annualInflation = "Enter a valid percentage.";
+  } else if (annualInflation <= -100) {
+    errors.annualInflation = "Inflation must be above -100%.";
+  }
   form.events.forEach((event) => {
     const year = readNumber(event.endYear);
     const amount = readNumber(event.amount);
-    if (!Number.isInteger(year) || year < 1 || year > PROJECTION_YEARS)
+    if (event.endYear.trim() === "") {
+      errors[`year-${event.id}`] = "Enter an event year.";
+    } else if (!Number.isInteger(year) || year < 1 || year > PROJECTION_YEARS) {
       errors[`year-${event.id}`] =
-        `Choose an end year from 1 to ${PROJECTION_YEARS}.`;
-    if (!Number.isFinite(amount) || amount < 0)
-      errors[`amount-${event.id}`] = "Enter an amount of $0 or more.";
+        `Choose a whole year from 1 to ${PROJECTION_YEARS}.`;
+    }
+    if (event.amount.trim() === "") {
+      errors[`amount-${event.id}`] = "Enter an event amount.";
+    } else if (!Number.isFinite(amount)) {
+      errors[`amount-${event.id}`] = "Enter a valid amount.";
+    } else if (amount < 0) {
+      errors[`amount-${event.id}`] = "Amount cannot be negative.";
+    }
   });
   return errors;
 }
@@ -309,7 +335,6 @@ export default function CalculatorDashboard() {
                 label="Annual investment return"
                 value={form.annualReturn}
                 suffix="%"
-                hint="Converted to an effective monthly rate."
                 error={errorFor("annualReturn")}
                 onChange={(value) => updateField("annualReturn", value)}
                 onBlur={() => markTouched("annualReturn")}
@@ -328,7 +353,7 @@ export default function CalculatorDashboard() {
                 label="Monthly withdrawal"
                 value={form.monthlyWithdrawal}
                 prefix="$"
-                hint="Increases annually with inflation when the opening balance is positive."
+                hint="Adjusted yearly for inflation."
                 error={errorFor("monthlyWithdrawal")}
                 onChange={(value) => updateField("monthlyWithdrawal", value)}
                 onBlur={() => markTouched("monthlyWithdrawal")}
@@ -614,41 +639,43 @@ export default function CalculatorDashboard() {
                     dollars.
                   </p>
                 </div>
+                <section
+                  className="min-w-0"
+                  aria-labelledby="annual-projection-heading"
+                >
+                  <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+                    <div>
+                      <p className="eyebrow">Year by year</p>
+                      <h2
+                        id="annual-projection-heading"
+                        className="mt-2 text-xl font-semibold tracking-[-0.035em]"
+                      >
+                        Annual projection
+                      </h2>
+                    </div>
+                    <span className="text-sm text-muted">
+                      51 projected years · all amounts in AUD
+                    </span>
+                  </div>
+                  <p className="mb-4 text-sm leading-6 text-muted xl:hidden">
+                    Select a year to view its opening balance, withdrawals, and
+                    windfalls.
+                  </p>
+                  <p className="mb-4 hidden text-sm leading-6 text-muted xl:block">
+                    Scroll sideways within the table to see all columns if
+                    needed.
+                  </p>
+                  <ProjectionTable rows={projection.rows} />
+                  <p className="mt-4 text-sm leading-6 text-muted">
+                    Year 0 covers the first 12 months. A negative closing
+                    balance shows a shortfall; the next year starts at zero.
+                    One-off events are applied at the end of the selected year.
+                  </p>
+                </section>
               </>
             )}
           </section>
         </div>
-        {projection && (
-          <section
-            className="mt-10 min-w-0"
-            aria-labelledby="annual-projection-heading"
-          >
-            <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <p className="eyebrow">Year by year</p>
-                <h2
-                  id="annual-projection-heading"
-                  className="mt-2 text-xl font-semibold tracking-[-0.035em]"
-                >
-                  Annual projection
-                </h2>
-              </div>
-              <span className="text-sm text-muted">
-                51 projected years · all amounts in AUD
-              </span>
-            </div>
-            <p className="mb-4 text-sm leading-6 text-muted xl:hidden">
-              Select a year to view its opening balance, withdrawals, and
-              windfalls.
-            </p>
-            <ProjectionTable rows={projection.rows} />
-            <p className="mt-4 max-w-[900px] text-sm leading-6 text-muted">
-              Year 0 covers the first 12 months. A negative closing balance
-              shows a shortfall; the next year starts at zero. One-off events
-              are applied at the end of the selected year.
-            </p>
-          </section>
-        )}
       </main>
       <footer className="border-t border-line bg-white px-5 py-8 text-xs leading-6 text-muted sm:px-8 lg:px-12">
         <div className="mx-auto flex max-w-[1824px] flex-col justify-between gap-3 sm:flex-row">

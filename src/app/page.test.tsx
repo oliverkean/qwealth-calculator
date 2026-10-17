@@ -36,6 +36,9 @@ function renderExample() {
 }
 
 function expectAnnualRow(year: number, expected: number[]) {
+  fireEvent.change(screen.getByRole("combobox", { name: "Years per page" }), {
+    target: { value: "51" },
+  });
   const table = screen.getByRole("table");
   const row = within(table).getAllByRole("row")[year + 1];
   expect(
@@ -100,10 +103,51 @@ describe("calculator page", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText("Planning tools / 01")).not.toBeInTheDocument();
     expect(screen.queryByText("Your assumptions")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("spinbutton", { name: "Annual investment return" }),
+    ).not.toHaveAttribute("aria-describedby");
+    expect(
+      screen.getByRole("spinbutton", { name: "Monthly withdrawal" }),
+    ).toHaveAccessibleDescription("Adjusted yearly for inflation.");
     expect(screen.getByRole("table")).toBeInTheDocument();
     expect(
       screen.getByRole("rowheader", { name: /Year 0/ }),
     ).toBeInTheDocument();
+  });
+
+  it("paginates every year, disables boundary controls, and resets when page size changes", () => {
+    renderExample();
+    const next = screen.getByRole("button", { name: "Next" });
+    const previous = screen.getByRole("button", {
+      name: "Previous",
+    });
+    const rowLabels = () =>
+      within(screen.getByRole("table"))
+        .getAllByRole("rowheader")
+        .map((cell) => cell.textContent);
+    expect(previous).toBeDisabled();
+    expect(rowLabels()).toEqual(
+      Array.from({ length: 10 }, (_, year) => `Year ${year}`),
+    );
+    for (let page = 1; page < 6; page += 1) fireEvent.click(next);
+    expect(rowLabels()).toEqual(["Year 50"]);
+    expect(next).toBeDisabled();
+    fireEvent.click(previous);
+    expect(rowLabels()).toEqual(
+      Array.from({ length: 10 }, (_, year) => `Year ${year + 40}`),
+    );
+    fireEvent.change(screen.getByRole("combobox", { name: "Years per page" }), {
+      target: { value: "25" },
+    });
+    expect(rowLabels()).toHaveLength(25);
+    expect(rowLabels()[0]).toBe("Year 0");
+    expect(previous).toBeDisabled();
+    expect(screen.getByText("Page 1 of 3")).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("combobox", { name: "Years per page" }), {
+      target: { value: "51" },
+    });
+    expect(rowLabels()).toHaveLength(51);
+    expect(next).toBeDisabled();
   });
 
   it("updates the projection and restores the optional example", async () => {
@@ -129,9 +173,7 @@ describe("calculator page", () => {
     });
     fireEvent.change(balance, { target: { value: "-1" } });
     fireEvent.blur(balance);
-    expect(
-      screen.getByText("Enter an amount of $0 or more."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Amount cannot be negative.")).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "Check your inputs" }),
     ).toBeInTheDocument();
@@ -241,22 +283,50 @@ describe("calculator page", () => {
   });
 
   it.each([
-    ["Starting balance", "-1"],
-    ["Monthly withdrawal", "-1"],
-    ["Annual investment return", "-101"],
-    ["Annual inflation", "-100"],
-    ["Starting balance", ""],
-  ])("validates %s and recovers after correction", (name, value) => {
+    ["Starting balance", "-1", "Amount cannot be negative."],
+    ["Monthly withdrawal", "-1", "Amount cannot be negative."],
+    ["Annual investment return", "-101", "Return cannot be below -100%."],
+    ["Annual inflation", "-100", "Inflation must be above -100%."],
+    ["Annual inflation", "-101", "Inflation must be above -100%."],
+    ["Starting balance", "", "Enter a starting balance."],
+    ["Monthly withdrawal", "", "Enter a monthly withdrawal."],
+    ["Annual investment return", "", "Enter an annual return."],
+    ["Annual inflation", "", "Enter an inflation rate."],
+  ])(
+    "validates %s (%s) and recovers after correction",
+    (name, value, message) => {
+      renderExample();
+      const field = screen.getByRole("spinbutton", { name });
+      const original = (field as HTMLInputElement).value;
+      fireEvent.change(field, { target: { value } });
+      fireEvent.blur(field);
+      expect(field).toHaveAttribute("aria-invalid", "true");
+      expect(field).toHaveAccessibleDescription(message);
+      expect(screen.queryByRole("table")).not.toBeInTheDocument();
+      fireEvent.change(field, { target: { value: original } });
+      expect(field).toHaveAttribute("aria-invalid", "false");
+      expect(screen.getByRole("table")).toBeInTheDocument();
+    },
+  );
+
+  it.each([
+    ["Starting balance", "0"],
+    ["Monthly withdrawal", "0"],
+    ["Annual investment return", "0"],
+    ["Annual inflation", "0"],
+    ["Annual investment return", "-1"],
+    ["Annual inflation", "-1"],
+    ["Annual investment return", "-100"],
+  ])("still accepts %s = %s", (name, value) => {
     renderExample();
     const field = screen.getByRole("spinbutton", { name });
-    const original = (field as HTMLInputElement).value;
     fireEvent.change(field, { target: { value } });
     fireEvent.blur(field);
-    expect(field).toHaveAttribute("aria-invalid", "true");
-    expect(screen.queryByRole("table")).not.toBeInTheDocument();
-    fireEvent.change(field, { target: { value: original } });
     expect(field).toHaveAttribute("aria-invalid", "false");
     expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Check your inputs" }),
+    ).not.toBeInTheDocument();
   });
 
   it("validates event year and amount, and supports an event in the last projected year", () => {
@@ -265,14 +335,22 @@ describe("calculator page", () => {
     const amount = screen.getAllByRole("spinbutton", {
       name: "Amount (AUD)",
     })[0];
-    fireEvent.change(year, { target: { value: "52" } });
+    fireEvent.change(year, { target: { value: "" } });
     fireEvent.blur(year);
+    expect(year).toHaveAccessibleDescription("Enter an event year.");
+    fireEvent.change(year, { target: { value: "52" } });
     expect(year).toHaveAttribute("aria-invalid", "true");
+    expect(year).toHaveAccessibleDescription(
+      "Choose a whole year from 1 to 51.",
+    );
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
     fireEvent.change(year, { target: { value: "51" } });
-    fireEvent.change(amount, { target: { value: "-1" } });
+    fireEvent.change(amount, { target: { value: "" } });
     fireEvent.blur(amount);
+    expect(amount).toHaveAccessibleDescription("Enter an event amount.");
+    fireEvent.change(amount, { target: { value: "-1" } });
     expect(amount).toHaveAttribute("aria-invalid", "true");
+    expect(amount).toHaveAccessibleDescription("Amount cannot be negative.");
     fireEvent.change(amount, { target: { value: "1234.56" } });
     expect(year).toHaveAttribute("aria-invalid", "false");
     expect(amount).toHaveAttribute("aria-invalid", "false");

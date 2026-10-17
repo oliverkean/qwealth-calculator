@@ -22,6 +22,16 @@ npm run parity      # Excel vs app values, differences, and cent-level pass/fail
 
 The engine tests compare all six financial columns across all 51 rows in 19 scenarios recalculated in Excel: 969 rows and 5,814 monetary comparisons. They check both unrounded differences below half a cent and identical formatted cents, together with the shortfall year. Cases include fractional amounts, large balances, zero and negative rates, and one-off events. Component tests verify that user edits update the summary, annual rows, and chart data. The parity command prints a report for every scenario; use `npm run parity -- --details` for every individual comparison.
 
+### Browser tests
+
+```powershell
+npx playwright install chromium  # One-time browser installation
+npm run test:e2e                 # Build, then test the production app
+npm run test:e2e:report          # Open the HTML results and screenshots
+```
+
+Playwright runs Chromium at widths of 375, 768, 1280, 1440, and 1920 pixels. It checks fresh client inputs, all annual financial fields, live chart paths, events, validation recovery, zero return, depletion, overflow, keyboard navigation, and the favicon. Pagination tests traverse all 51 years and check that the annual projection follows the chart instead of waiting for the sidebar to end. Each test also fails on browser errors or warnings. Page, chart, and paginated-results screenshots are attached to the report. Tests use an isolated production server on port 3100 and do not reuse the preview on port 3000. Generated reports, traces, and screenshots stay in ignored `playwright-report/` and `test-results/` folders. These runs cover Chromium, not Firefox or Safari.
+
 ## How the model works
 
 The workbook has 51 rows, labelled Year 0 through Year 50. Year 0 is the **first** 12 months, so a one-off event entered as “End year 1” is applied in workbook Year 0. The default shortfall occurs in workbook Year 21, which is the end of projection year 22; 21 complete years have positive closing balances before it.
@@ -51,7 +61,7 @@ The chart's nominal line uses column H directly. Its dashed inflation-adjusted *
 - `src/lib/calculator.ts`: pure, deterministic calculation, types, defaults, and input validation. No React or browser dependencies.
 - `src/components/calculator-dashboard.tsx`: local form state, field feedback, and result composition. Data stays in the browser; no account, API, or database is needed.
 - `src/components/balance-chart.tsx`: Recharts visualization, dynamically loaded so the chart bundle is separate from the static page.
-- `src/components/projection-table.tsx`: full-width desktop table and expandable year cards on narrow screens, with the same fields and values and no horizontal-scroll requirement.
+- `src/components/projection-table.tsx`: paginated annual results directly beneath the chart, with 10/25/all-year options. Desktop tables scroll within their own region when needed; narrow screens use expandable cards with the same fields and values.
 - `src/lib/calculator.test.ts`: Excel golden fixtures and edge cases.
 - `src/lib/calculator-excel.test.ts`: complete annual comparisons across 19 Excel-recalculated scenarios.
 - `scripts/extract-excel-fixtures.ps1`: reproduces fixture extraction using installed Windows Excel on a temporary workbook copy.
