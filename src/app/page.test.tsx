@@ -49,7 +49,7 @@ function expectAnnualRow(year: number, expected: number[]) {
 }
 
 describe("calculator page", () => {
-  it("starts empty and calculates only the client's entered values, then clears the scenario", async () => {
+  it("starts with default rates and calculates the client's entered values, then clears the scenario", async () => {
     const user = userEvent.setup();
     const fixture = fixtures.find(
       (item) => item.name === "Survives projection",
@@ -58,15 +58,26 @@ describe("calculator page", () => {
     expect(
       screen.getByRole("heading", { name: "Start your projection" }),
     ).toBeInTheDocument();
-    screen
-      .getAllByRole("spinbutton")
-      .forEach((field) => expect(field).toHaveValue(null));
+    expect(
+      screen.getByRole("spinbutton", { name: "Starting balance" }),
+    ).toHaveValue(null);
+    expect(
+      screen.getByRole("spinbutton", { name: "Monthly withdrawal" }),
+    ).toHaveValue(null);
+    expect(
+      screen.getByRole("spinbutton", {
+        name: "Average annual investment return",
+      }),
+    ).toHaveValue(7.5);
+    expect(
+      screen.getByRole("spinbutton", { name: "Average annual inflation" }),
+    ).toHaveValue(3);
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
     expect(chartRender).not.toHaveBeenCalled();
     const values = [
       ["Starting balance", fixture.inputs.startingBalance],
-      ["Annual investment return", fixture.inputs.annualReturn * 100],
-      ["Annual inflation", fixture.inputs.annualInflation * 100],
+      ["Average annual investment return", fixture.inputs.annualReturn * 100],
+      ["Average annual inflation", fixture.inputs.annualInflation * 100],
       ["Monthly withdrawal", fixture.inputs.monthlyWithdrawal],
     ] as const;
     values.forEach(([name, value]) =>
@@ -90,6 +101,52 @@ describe("calculator page", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("uses the initial rates and recalculates when the user replaces them", () => {
+    render(<Home />);
+    fireEvent.change(
+      screen.getByRole("spinbutton", { name: "Starting balance" }),
+      { target: { value: "1650000" } },
+    );
+    fireEvent.change(
+      screen.getByRole("spinbutton", { name: "Monthly withdrawal" }),
+      { target: { value: "10000" } },
+    );
+    expectAnnualRow(
+      0,
+      fixtures.find((item) => item.name === "Default")!.rows[0],
+    );
+    expect(screen.queryByText("Event 1")).not.toBeInTheDocument();
+    const initialChartRows = chartRender.mock.calls.at(-1)?.[0].rows;
+    expect(initialChartRows[1].lumpSumWindfalls).toBe(0);
+
+    const fixture = fixtures.find((item) => item.name === "Deflation")!;
+    for (const [name, value] of [
+      ["Starting balance", fixture.inputs.startingBalance],
+      ["Average annual investment return", fixture.inputs.annualReturn * 100],
+      ["Average annual inflation", fixture.inputs.annualInflation * 100],
+      ["Monthly withdrawal", fixture.inputs.monthlyWithdrawal],
+    ] as const) {
+      const field = screen.getByRole("spinbutton", { name });
+      fireEvent.change(field, { target: { value: String(value) } });
+      expect(field).toHaveValue(value);
+    }
+    expectAnnualRow(0, fixture.rows[0]);
+    expectAnnualRow(9, fixture.rows[9]);
+    expectAnnualRow(50, fixture.rows[50]);
+    expect(screen.getByLabelText("First shortfall year")).toHaveTextContent(
+      "Year 12",
+    );
+    const updatedChartRows = chartRender.mock.calls.at(-1)?.[0].rows;
+    expect(updatedChartRows).not.toEqual(initialChartRows);
+    fixture.rows.forEach((expected, year) =>
+      columns.forEach((column, index) =>
+        expect(money.format(updatedChartRows[year][column])).toBe(
+          money.format(expected[index]),
+        ),
+      ),
+    );
+  });
+
   it("loads the optional example and explains year indexing", () => {
     renderExample();
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
@@ -104,7 +161,9 @@ describe("calculator page", () => {
     expect(screen.queryByText("Planning tools / 01")).not.toBeInTheDocument();
     expect(screen.queryByText("Your assumptions")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("spinbutton", { name: "Annual investment return" }),
+      screen.getByRole("spinbutton", {
+        name: "Average annual investment return",
+      }),
     ).not.toHaveAttribute("aria-describedby");
     expect(
       screen.getByRole("spinbutton", { name: "Monthly withdrawal" }),
@@ -201,8 +260,8 @@ describe("calculator page", () => {
       renderExample();
       const values = [
         ["Starting balance", fixture.inputs.startingBalance],
-        ["Annual investment return", fixture.inputs.annualReturn * 100],
-        ["Annual inflation", fixture.inputs.annualInflation * 100],
+        ["Average annual investment return", fixture.inputs.annualReturn * 100],
+        ["Average annual inflation", fixture.inputs.annualInflation * 100],
         ["Monthly withdrawal", fixture.inputs.monthlyWithdrawal],
       ] as const;
       values.forEach(([name, value]) =>
@@ -285,13 +344,17 @@ describe("calculator page", () => {
   it.each([
     ["Starting balance", "-1", "Amount cannot be negative."],
     ["Monthly withdrawal", "-1", "Amount cannot be negative."],
-    ["Annual investment return", "-101", "Return cannot be below -100%."],
-    ["Annual inflation", "-100", "Inflation must be above -100%."],
-    ["Annual inflation", "-101", "Inflation must be above -100%."],
+    [
+      "Average annual investment return",
+      "-101",
+      "Return cannot be below -100%.",
+    ],
+    ["Average annual inflation", "-100", "Inflation must be above -100%."],
+    ["Average annual inflation", "-101", "Inflation must be above -100%."],
     ["Starting balance", "", "Enter a starting balance."],
     ["Monthly withdrawal", "", "Enter a monthly withdrawal."],
-    ["Annual investment return", "", "Enter an annual return."],
-    ["Annual inflation", "", "Enter an inflation rate."],
+    ["Average annual investment return", "", "Enter an average annual return."],
+    ["Average annual inflation", "", "Enter an average annual inflation rate."],
   ])(
     "validates %s (%s) and recovers after correction",
     (name, value, message) => {
@@ -312,11 +375,11 @@ describe("calculator page", () => {
   it.each([
     ["Starting balance", "0"],
     ["Monthly withdrawal", "0"],
-    ["Annual investment return", "0"],
-    ["Annual inflation", "0"],
-    ["Annual investment return", "-1"],
-    ["Annual inflation", "-1"],
-    ["Annual investment return", "-100"],
+    ["Average annual investment return", "0"],
+    ["Average annual inflation", "0"],
+    ["Average annual investment return", "-1"],
+    ["Average annual inflation", "-1"],
+    ["Average annual investment return", "-100"],
   ])("still accepts %s = %s", (name, value) => {
     renderExample();
     const field = screen.getByRole("spinbutton", { name });

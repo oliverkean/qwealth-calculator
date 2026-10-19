@@ -39,8 +39,8 @@ async function fillInputs(
 ) {
   for (const [name, value] of [
     ["Starting balance", inputs.startingBalance],
-    ["Annual investment return", inputs.annualReturn * 100],
-    ["Annual inflation", inputs.annualInflation * 100],
+    ["Average annual investment return", inputs.annualReturn * 100],
+    ["Average annual inflation", inputs.annualInflation * 100],
     ["Monthly withdrawal", inputs.monthlyWithdrawal],
   ] as const) {
     await page
@@ -126,10 +126,51 @@ test("fresh client values produce all annual rows and a real chart without overf
   await expect(
     page.getByRole("heading", { name: "Start your projection" }),
   ).toBeVisible();
-  for (const input of await page.getByRole("spinbutton").all()) {
-    await expect(input).toHaveValue("");
-  }
+  await expect(
+    page.getByRole("spinbutton", { name: "Starting balance", exact: true }),
+  ).toHaveValue("");
+  await expect(
+    page.getByRole("spinbutton", { name: "Monthly withdrawal", exact: true }),
+  ).toHaveValue("");
+  await expect(
+    page.getByRole("spinbutton", {
+      name: "Average annual investment return",
+      exact: true,
+    }),
+  ).toHaveValue("7.5");
+  await expect(
+    page.getByRole("spinbutton", {
+      name: "Average annual inflation",
+      exact: true,
+    }),
+  ).toHaveValue("3");
   await expect(page.getByRole("img", { name: chartName })).toHaveCount(0);
+  const headingLayout = await page
+    .getByRole("heading", { level: 1 })
+    .evaluate((heading) => ({
+      height: heading.getBoundingClientRect().height,
+      lineHeight: Number.parseFloat(getComputedStyle(heading).lineHeight),
+    }));
+  if (page.viewportSize()!.width >= 768) {
+    expect(headingLayout.height).toBeLessThanOrEqual(
+      headingLayout.lineHeight + 1,
+    );
+  }
+
+  await page
+    .getByRole("spinbutton", { name: "Starting balance", exact: true })
+    .fill("1650000");
+  await page
+    .getByRole("spinbutton", { name: "Monthly withdrawal", exact: true })
+    .fill("10000");
+  await expectClosing(page, 0, 1_649_678.86);
+  await expect(
+    page.getByRole("button", { name: "Remove", exact: true }),
+  ).toHaveCount(0);
+  const initialChart = await expectChart(page);
+  const initialPaths = await initialChart
+    .locator("path.recharts-line-curve")
+    .evaluateAll((paths) => paths.map((path) => path.getAttribute("d")));
   const fixture = fixtures.find((item) => item.name === "Deflation")!;
   await fillInputs(page, fixture.inputs);
   await expectRows(page, fixture.rows);
@@ -148,6 +189,13 @@ test("fresh client values produce all annual rows and a real chart without overf
   );
   await expect(page.getByLabel("First shortfall year")).toHaveText("Year 12");
   const chart = await expectChart(page);
+  await expect
+    .poll(() =>
+      chart
+        .locator("path.recharts-line-curve")
+        .evaluateAll((paths) => paths.map((path) => path.getAttribute("d"))),
+    )
+    .not.toEqual(initialPaths);
   await expect
     .poll(() =>
       page.evaluate(() => ({
@@ -219,8 +267,8 @@ test("each main input updates displayed amounts and the actual chart paths", asy
 }) => {
   for (const [name, value, scenario] of [
     ["Starting balance", "2500000", "Larger starting balance"],
-    ["Annual investment return", "-4", "Negative return"],
-    ["Annual inflation", "0", "Zero inflation"],
+    ["Average annual investment return", "-4", "Negative return"],
+    ["Average annual inflation", "0", "Zero inflation"],
     ["Monthly withdrawal", "0", "Zero withdrawals"],
   ] as const) {
     await page
@@ -308,13 +356,17 @@ test("invalid main fields hide results and recover after correction", async ({
   for (const [name, invalid, message] of [
     ["Starting balance", "-1", "Amount cannot be negative."],
     ["Monthly withdrawal", "-1", "Amount cannot be negative."],
-    ["Annual investment return", "-101", "Return cannot be below -100%."],
-    ["Annual inflation", "-100", "Inflation must be above -100%."],
-    ["Annual inflation", "-101", "Inflation must be above -100%."],
+    [
+      "Average annual investment return",
+      "-101",
+      "Return cannot be below -100%.",
+    ],
+    ["Average annual inflation", "-100", "Inflation must be above -100%."],
+    ["Average annual inflation", "-101", "Inflation must be above -100%."],
     ["Starting balance", "", "Enter a starting balance."],
     ["Monthly withdrawal", "", "Enter a monthly withdrawal."],
-    ["Annual investment return", "", "Enter an annual return."],
-    ["Annual inflation", "", "Enter an inflation rate."],
+    ["Average annual investment return", "", "Enter an average annual return."],
+    ["Average annual inflation", "", "Enter an average annual inflation rate."],
   ] as const) {
     const input = page.getByRole("spinbutton", { name, exact: true });
     const original = await input.inputValue();
@@ -391,7 +443,10 @@ test("zero return and exact depletion remain finite and numeric overflow is expl
     .getByRole("spinbutton", { name: "Starting balance", exact: true })
     .fill("1e308");
   await page
-    .getByRole("spinbutton", { name: "Annual investment return", exact: true })
+    .getByRole("spinbutton", {
+      name: "Average annual investment return",
+      exact: true,
+    })
     .fill("7.5");
   await expect(
     page.getByText("This scenario exceeds the calculator's numeric range."),

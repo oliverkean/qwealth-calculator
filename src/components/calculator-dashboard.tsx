@@ -55,6 +55,14 @@ function createEmptyForm(): FormState {
   };
 }
 
+function createInitialForm(): FormState {
+  return {
+    ...createEmptyForm(),
+    annualReturn: String(defaultInputs.annualReturn * 100),
+    annualInflation: String(defaultInputs.annualInflation * 100),
+  };
+}
+
 function createExampleForm(): FormState {
   return {
     startingBalance: String(defaultInputs.startingBalance),
@@ -109,7 +117,7 @@ function getFieldErrors(form: FormState): Record<string, string> {
   }
   const annualReturn = readNumber(form.annualReturn);
   if (form.annualReturn.trim() === "") {
-    errors.annualReturn = "Enter an annual return.";
+    errors.annualReturn = "Enter an average annual return.";
   } else if (!Number.isFinite(annualReturn)) {
     errors.annualReturn = "Enter a valid percentage.";
   } else if (annualReturn < -100) {
@@ -117,7 +125,7 @@ function getFieldErrors(form: FormState): Record<string, string> {
   }
   const annualInflation = readNumber(form.annualInflation);
   if (form.annualInflation.trim() === "") {
-    errors.annualInflation = "Enter an inflation rate.";
+    errors.annualInflation = "Enter an average annual inflation rate.";
   } else if (!Number.isFinite(annualInflation)) {
     errors.annualInflation = "Enter a valid percentage.";
   } else if (annualInflation <= -100) {
@@ -222,7 +230,7 @@ function NumberField({
  * Invalid edits clear the results; calculation failures appear in the results area.
  */
 export default function CalculatorDashboard() {
-  const [form, setForm] = useState<FormState>(createEmptyForm);
+  const [form, setForm] = useState<FormState>(createInitialForm);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const fieldErrors = useMemo(() => getFieldErrors(form), [form]);
   const inputs = useMemo(() => parseForm(form), [form]);
@@ -286,16 +294,16 @@ export default function CalculatorDashboard() {
 
       <main
         id="main-content"
-        className="mx-auto w-full max-w-[1920px] px-5 pb-20 pt-10 sm:px-8 sm:pt-14 lg:px-12"
+        className="mx-auto w-full max-w-[1920px] px-5 pb-20 pt-6 sm:px-8 sm:pt-8 lg:px-12"
       >
-        <div className="mb-10 max-w-[820px]">
-          <div className="mb-4 flex items-center gap-3 text-[11px] font-bold uppercase tracking-[0.2em] text-orange">
+        <div className="mb-6">
+          <div className="mb-2 flex items-center gap-3 text-[11px] font-bold uppercase tracking-[0.2em] text-orange">
             <span className="h-px w-8 bg-orange" /> Retirement planning
           </div>
-          <h1 className="max-w-[820px] text-balance text-[clamp(2.6rem,5vw,4.6rem)] font-semibold leading-[1.06] tracking-[-0.065em]">
+          <h1 className="text-[clamp(1.875rem,3.5vw,3rem)] font-semibold leading-tight tracking-[-0.045em]">
             How long will your money last?
           </h1>
-          <p className="mt-5 max-w-[670px] text-base leading-7 text-muted sm:text-lg">
+          <p className="mt-3 text-base leading-6 text-muted sm:text-lg">
             Explore how withdrawals, investment returns, inflation, and one-off
             events shape your balance over time.
           </p>
@@ -346,7 +354,7 @@ export default function CalculatorDashboard() {
               />
               <NumberField
                 id="annualReturn"
-                label="Annual investment return"
+                label="Average annual investment return"
                 value={form.annualReturn}
                 suffix="%"
                 error={errorFor("annualReturn")}
@@ -355,7 +363,7 @@ export default function CalculatorDashboard() {
               />
               <NumberField
                 id="annualInflation"
-                label="Annual inflation"
+                label="Average annual inflation"
                 value={form.annualInflation}
                 suffix="%"
                 error={errorFor("annualInflation")}
@@ -556,7 +564,7 @@ export default function CalculatorDashboard() {
                   {calculationError ??
                     (hasVisibleErrors
                       ? "Enter valid values in all fields to see your projection."
-                      : "Enter your starting balance, expected annual return, inflation rate, and monthly withdrawal. Your results will appear here and update as you make changes.")}
+                      : "Enter your starting balance, average annual investment return, average annual inflation, and monthly withdrawal. Your results will appear here and update as you make changes.")}
                 </p>
               </div>
             ) : (

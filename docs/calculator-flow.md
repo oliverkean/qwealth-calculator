@@ -20,7 +20,7 @@ flowchart TD
     K -- Clear --> A
 ```
 
-The same calculated rows feed the summary, the chart, the desktop table, and the expandable year cards. The calculator starts empty so each client enters their own figures. Load example fills the optional reference scenario; Clear removes all values and events. A change to any input creates a new projection; there are no fixed result values.
+The same calculated rows feed the summary, the chart, the desktop table, and the expandable year cards. The calculator starts with an editable 7.5% average annual return and 3% average annual inflation. Starting balance and monthly withdrawal remain blank until entered. Load example fills the full reference scenario; Clear removes all values and events. A change to any input creates a new projection; there are no fixed result values.
 
 For Year 0, the opening balance is the user's starting balance and regular annual withdrawals are 12 times the initial monthly amount. Later rows use the prior closing balance, or zero if that closing balance was negative. Regular withdrawals increase with inflation only when the new opening balance is positive.
 
