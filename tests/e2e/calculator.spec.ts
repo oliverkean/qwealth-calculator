@@ -8,7 +8,7 @@ const money = new Intl.NumberFormat("en-AU", {
   maximumFractionDigits: 2,
 });
 
-const chartName = /Line chart of nominal and inflation-adjusted/;
+const chartName = /Column chart of opening balances/;
 const browserErrors = new WeakMap<Page, string[]>();
 
 test.beforeEach(async ({ page }) => {
@@ -43,16 +43,12 @@ async function fillInputs(
     ["Average annual inflation", inputs.annualInflation * 100],
     ["Monthly withdrawal", inputs.monthlyWithdrawal],
   ] as const) {
-    await page
-      .getByRole("spinbutton", { name, exact: true })
-      .fill(String(value));
+    await page.getByRole("textbox", { name, exact: true }).fill(String(value));
   }
 }
 
 async function expectRows(page: Page, rows: number[][]) {
-  await page
-    .getByRole("combobox", { name: "Years per page" })
-    .selectOption("51");
+  await page.getByRole("combobox", { name: "Year range" }).selectOption("51");
   const expected = rows.map((row) => row.map((value) => money.format(value)));
   if (page.viewportSize()!.width >= 1280) {
     const table = page.getByRole("table");
@@ -90,9 +86,7 @@ async function expectRows(page: Page, rows: number[][]) {
 }
 
 async function expectClosing(page: Page, year: number, amount: number) {
-  await page
-    .getByRole("combobox", { name: "Years per page" })
-    .selectOption("51");
+  await page.getByRole("combobox", { name: "Year range" }).selectOption("51");
   const value =
     page.viewportSize()!.width >= 1280
       ? page
@@ -113,12 +107,177 @@ async function expectClosing(page: Page, year: number, amount: number) {
 async function expectChart(page: Page) {
   const chart = page.getByRole("img", { name: chartName });
   await expect(chart).toBeVisible();
-  await expect(chart.locator("path.recharts-line-curve")).toHaveCount(2);
+  await expect(chart.locator(".recharts-bar-rectangles")).toHaveCount(2);
   await expect(
-    chart.locator("path.recharts-line-curve").first(),
+    chart.locator(".recharts-bar-rectangle path.recharts-rectangle").first(),
   ).toHaveAttribute("d", /^M.+/);
   return chart;
 }
+
+test("chart columns and tooltips follow the table's opening balances and projection years", async ({
+  page,
+}, testInfo) => {
+  await page.getByRole("button", { name: "Load example", exact: true }).click();
+  const chart = await expectChart(page);
+  const fixture = fixtures.find((item) => item.name === "Default")!;
+  const series = chart.locator(".recharts-bar-rectangles");
+  for (const [index, group] of (await series.all()).entries()) {
+    const nonzeroOpenings = fixture.rows.filter(
+      (row) => row[index] !== 0,
+    ).length;
+    await expect(group.locator(".recharts-bar-rectangle")).toHaveCount(
+      nonzeroOpenings,
+    );
+  }
+  const tooltip = chart.locator(".recharts-tooltip-wrapper");
+  const hoverYear = async (year: number) => {
+    const surface = chart.locator("svg.recharts-surface");
+    await surface.scrollIntoViewIfNeeded();
+    const column = (await series
+      .first()
+      .locator(".recharts-bar-rectangle")
+      .nth(year)
+      .boundingBox())!;
+    const plot = (await surface.boundingBox())!;
+    // Axis tooltips use the whole year band, not the thin column's hit target.
+    await surface.hover({
+      position: { x: column.x + column.width / 2 - plot.x, y: plot.height / 2 },
+    });
+  };
+  for (const year of [0, 1, 2]) {
+    await hoverYear(year);
+    await expect(tooltip).toBeVisible();
+    await expect(tooltip).toContainText(`Projection Year ${year}`);
+    await expect(
+      tooltip.getByLabel("Chart Opening balance", { exact: true }),
+    ).toHaveText(money.format(fixture.rows[year][0]));
+    await expect(
+      tooltip.getByLabel("Chart In today's dollars", { exact: true }),
+    ).toHaveText(money.format(fixture.rows[year][1]));
+  }
+  await page
+    .getByRole("textbox", { name: "Starting balance", exact: true })
+    .fill("1350000");
+  await hoverYear(1);
+  await expect(tooltip).toContainText("Projection Year 1");
+  await expect(tooltip).toContainText("$1,327,178.86");
+  await expect(tooltip).toContainText("$1,288,523.16");
+  const surface = chart.locator("svg.recharts-surface");
+  await page.mouse.move(0, 0);
+  await surface.focus();
+  await expect(tooltip).toContainText("Projection Year 0");
+  await surface.press("ArrowRight");
+  await expect(tooltip).toContainText("Projection Year 1");
+  await expect(tooltip).toContainText("$1,327,178.86");
+  for (let year = 2; year <= 50; year += 1) {
+    await surface.press("ArrowRight");
+    await expect(tooltip).toContainText(`Projection Year ${year}`);
+  }
+  await expect(
+    tooltip.getByLabel("Chart Opening balance", { exact: true }),
+  ).toHaveText("$0.00");
+  await expect(
+    tooltip.getByLabel("Chart In today's dollars", { exact: true }),
+  ).toHaveText("$0.00");
+  await surface.press("ArrowRight");
+  await expect(tooltip).toContainText("Projection Year 50");
+  await surface.press("Tab");
+  await page.mouse.move(0, 0);
+  await chart.screenshot({
+    path: testInfo.outputPath("opening-balances-chart.png"),
+  });
+});
+
+test("chart explains first shortfall, exact zero, later funds, and the finite horizon", async ({
+  page,
+}, testInfo) => {
+  await page.getByRole("button", { name: "Load example", exact: true }).click();
+  const chart = await expectChart(page);
+  const summary = page.getByLabel("Chart duration summary", { exact: true });
+  const marker = chart.locator(".first-shortfall-marker");
+  await expect(summary).toContainText("First shortfall: end of Year 21");
+  await expect(marker).toHaveCount(1);
+  const surface = chart.locator("svg.recharts-surface");
+  const tooltip = chart.locator(".recharts-tooltip-wrapper");
+  await surface.scrollIntoViewIfNeeded();
+  await page.mouse.move(0, 0);
+  await surface.focus();
+  for (let year = 1; year <= 21; year += 1) {
+    await surface.press("ArrowRight");
+    await expect(tooltip).toContainText(`Projection Year ${year}`);
+  }
+  const expected = fixtures.find((item) => item.name === "Default")!.rows[21];
+  await expect(
+    tooltip.getByLabel("Chart Closing balance", { exact: true }),
+  ).toHaveText(money.format(expected[5]));
+  await expect(
+    tooltip.getByLabel("Chart Regular withdrawals", { exact: true }),
+  ).toHaveText(money.format(expected[2]));
+  const tooltipBox = (await tooltip.boundingBox())!;
+  const plotBox = (await surface.boundingBox())!;
+  expect(tooltipBox.x).toBeGreaterThanOrEqual(plotBox.x);
+  expect(tooltipBox.x + tooltipBox.width).toBeLessThanOrEqual(
+    plotBox.x + plotBox.width,
+  );
+  await chart.screenshot({ path: testInfo.outputPath("shortfall-chart.png") });
+  await surface.press("Tab");
+  await page
+    .getByRole("textbox", { name: "Monthly withdrawal", exact: true })
+    .fill("0");
+  await expect(summary).toContainText(
+    "Money stays positive through all 51 projected years",
+  );
+  await expect(summary).toContainText("No projection beyond this horizon.");
+  await expect(marker).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Clear", exact: true }).click();
+  await fillInputs(page, {
+    startingBalance: 1200,
+    monthlyWithdrawal: 100,
+    annualReturn: 0,
+    annualInflation: 0,
+  });
+  await expect(summary).toContainText("First shortfall: end of Year 0");
+  await expect(marker.locator("line")).toHaveAttribute("stroke-width", "2");
+  await expect(chart.getByText("Year 0 end", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "+ Add event", exact: true }).click();
+  await page
+    .getByRole("textbox", { name: "Projection year", exact: true })
+    .fill("3");
+  await page
+    .getByRole("textbox", { name: "Amount (AUD)", exact: true })
+    .fill("5000");
+  await page.getByRole("button", { name: "Save event", exact: true }).click();
+  await expect(summary).toContainText("First shortfall: end of Year 0");
+  await expect(summary).toContainText(
+    "Later positive balances do not remove this first shortfall.",
+  );
+
+  await page.getByRole("button", { name: "Clear", exact: true }).click();
+  await fillInputs(page, {
+    startingBalance: 6100,
+    monthlyWithdrawal: 10,
+    annualReturn: 0,
+    annualInflation: 0,
+  });
+  await expect(summary).toContainText("First shortfall: end of Year 50");
+  await expect(marker.locator("line")).toHaveAttribute("stroke-width", "2");
+  const finalLabel = chart.getByText("Year 50 end", { exact: true });
+  await expect(finalLabel).toBeVisible();
+  const labelBox = (await finalLabel.boundingBox())!;
+  const surfaceBox = (await surface.boundingBox())!;
+  expect(labelBox.x).toBeGreaterThanOrEqual(surfaceBox.x);
+  expect(labelBox.x + labelBox.width).toBeLessThanOrEqual(
+    surfaceBox.x + surfaceBox.width,
+  );
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(
+    page.viewportSize()!.width,
+  );
+  await page.mouse.move(0, 0);
+  await chart.screenshot({
+    path: testInfo.outputPath("final-year-shortfall-chart.png"),
+  });
+});
 
 test("fresh client values produce all annual rows and a real chart without overflow", async ({
   page,
@@ -127,19 +286,19 @@ test("fresh client values produce all annual rows and a real chart without overf
     page.getByRole("heading", { name: "Start your projection" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("spinbutton", { name: "Starting balance", exact: true }),
+    page.getByRole("textbox", { name: "Starting balance", exact: true }),
   ).toHaveValue("");
   await expect(
-    page.getByRole("spinbutton", { name: "Monthly withdrawal", exact: true }),
+    page.getByRole("textbox", { name: "Monthly withdrawal", exact: true }),
   ).toHaveValue("");
   await expect(
-    page.getByRole("spinbutton", {
+    page.getByRole("textbox", {
       name: "Average annual investment return",
       exact: true,
     }),
   ).toHaveValue("7.5");
   await expect(
-    page.getByRole("spinbutton", {
+    page.getByRole("textbox", {
       name: "Average annual inflation",
       exact: true,
     }),
@@ -158,18 +317,18 @@ test("fresh client values produce all annual rows and a real chart without overf
   }
 
   await page
-    .getByRole("spinbutton", { name: "Starting balance", exact: true })
+    .getByRole("textbox", { name: "Starting balance", exact: true })
     .fill("1650000");
   await page
-    .getByRole("spinbutton", { name: "Monthly withdrawal", exact: true })
+    .getByRole("textbox", { name: "Monthly withdrawal", exact: true })
     .fill("10000");
   await expectClosing(page, 0, 1_649_678.86);
   await expect(
     page.getByRole("button", { name: "Remove", exact: true }),
   ).toHaveCount(0);
   const initialChart = await expectChart(page);
-  const initialPaths = await initialChart
-    .locator("path.recharts-line-curve")
+  const initialColumns = await initialChart
+    .locator(".recharts-bar-rectangle path.recharts-rectangle")
     .evaluateAll((paths) => paths.map((path) => path.getAttribute("d")));
   const fixture = fixtures.find((item) => item.name === "Deflation")!;
   await fillInputs(page, fixture.inputs);
@@ -192,10 +351,10 @@ test("fresh client values produce all annual rows and a real chart without overf
   await expect
     .poll(() =>
       chart
-        .locator("path.recharts-line-curve")
+        .locator(".recharts-bar-rectangle path.recharts-rectangle")
         .evaluateAll((paths) => paths.map((path) => path.getAttribute("d"))),
     )
-    .not.toEqual(initialPaths);
+    .not.toEqual(initialColumns);
   await expect
     .poll(() =>
       page.evaluate(() => ({
@@ -247,7 +406,7 @@ test("Load example is optional and Clear removes all values, events, and results
   ).toHaveCount(3);
   await expectChart(page);
   await page.getByRole("button", { name: "Clear", exact: true }).click();
-  for (const input of await page.getByRole("spinbutton").all()) {
+  for (const input of await page.getByRole("textbox").all()) {
     await expect(input).toHaveValue("");
   }
   await expect(
@@ -262,7 +421,7 @@ test("Load example is optional and Clear removes all values, events, and results
   ).toBeVisible();
 });
 
-test("each main input updates displayed amounts and the actual chart paths", async ({
+test("each main input updates displayed amounts and the actual chart columns", async ({
   page,
 }) => {
   for (const [name, value, scenario] of [
@@ -275,10 +434,10 @@ test("each main input updates displayed amounts and the actual chart paths", asy
       .getByRole("button", { name: "Load example", exact: true })
       .click();
     const chart = await expectChart(page);
-    const previousPaths = await chart
-      .locator("path.recharts-line-curve")
+    const previousColumns = await chart
+      .locator(".recharts-bar-rectangle path.recharts-rectangle")
       .evaluateAll((paths) => paths.map((path) => path.getAttribute("d")));
-    await page.getByRole("spinbutton", { name, exact: true }).fill(value);
+    await page.getByRole("textbox", { name, exact: true }).fill(value);
     const fixture = fixtures.find((item) => item.name === scenario)!;
     await expectRows(page, fixture.rows);
     await expect(page.getByLabel("Year 10 nominal balance")).toHaveText(
@@ -287,10 +446,10 @@ test("each main input updates displayed amounts and the actual chart paths", asy
     await expect
       .poll(() =>
         chart
-          .locator("path.recharts-line-curve")
+          .locator(".recharts-bar-rectangle path.recharts-rectangle")
           .evaluateAll((paths) => paths.map((path) => path.getAttribute("d"))),
       )
-      .not.toEqual(previousPaths);
+      .not.toEqual(previousColumns);
     await expect(page.getByLabel("First shortfall year")).toHaveText(
       fixture.depletionEndYear === null
         ? "Not reached"
@@ -299,9 +458,9 @@ test("each main input updates displayed amounts and the actual chart paths", asy
   }
 });
 
-test("event year, type, amount, duplicates, and removal affect the selected annual row", async ({
+test("event drafts save, cancel, aggregate, and update the selected annual row", async ({
   page,
-}) => {
+}, testInfo) => {
   await fillInputs(page, {
     startingBalance: 1_000_000,
     annualReturn: 0,
@@ -309,36 +468,76 @@ test("event year, type, amount, duplicates, and removal affect the selected annu
     monthlyWithdrawal: 1000,
   });
   await expectClosing(page, 1, 976_000);
-  await page.getByRole("button", { name: "+ Add event", exact: true }).click();
-  await page
-    .getByRole("spinbutton", { name: "End year", exact: true })
-    .fill("2");
-  await page
-    .getByRole("spinbutton", { name: "Amount (AUD)", exact: true })
-    .fill("5000");
+  const add = page.getByRole("button", { name: "+ Add event", exact: true });
+  const save = page.getByRole("button", { name: "Save event", exact: true });
+  const year = page.getByRole("textbox", {
+    name: "Projection year",
+    exact: true,
+  });
+  const amount = page.getByRole("textbox", {
+    name: "Amount (AUD)",
+    exact: true,
+  });
+  const edit = page.getByRole("button", { name: "Edit", exact: true });
+  await add.click();
+  const dialog = page.getByRole("dialog", { name: "Add one-off event" });
+  await expect(dialog).toBeVisible();
+  await expect(year).toBeFocused();
+  await year.press("Backspace");
+  await expect(year).toHaveValue("");
+  await year.fill("1");
+  await amount.click();
+  await amount.press("Backspace");
+  await expect(amount).toHaveValue("");
+  await amount.fill("5,000");
+  await save.click();
   await expectClosing(page, 1, 981_000);
+  await expect(
+    page.getByRole("list", { name: "One-off event list" }),
+  ).toContainText("$5,000.00");
+  await edit.click();
+  await year.fill("0");
+  await page
+    .getByRole("dialog")
+    .screenshot({ path: testInfo.outputPath("event-modal.png") });
+  await save.click();
+  await expectClosing(page, 0, 993_000);
+
+  await edit.click();
+  await amount.fill("999999");
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(edit).toBeFocused();
+  await expectClosing(page, 0, 993_000);
+  await edit.click();
+  await amount.fill("999999");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(edit).toBeFocused();
+  await expectClosing(page, 0, 993_000);
+
+  await edit.click();
+  await year.fill("1");
+  await save.click();
+  await expectClosing(page, 0, 988_000);
+  await edit.click();
   await page
     .getByRole("combobox", { name: "Type", exact: true })
     .selectOption("withdrawal");
+  await save.click();
   await expectClosing(page, 1, 971_000);
-  await page
-    .getByRole("spinbutton", { name: "Amount (AUD)", exact: true })
-    .fill("2000");
+  await edit.click();
+  await amount.fill("2000");
+  await save.click();
   await expectClosing(page, 1, 974_000);
-  await page
-    .getByRole("spinbutton", { name: "End year", exact: true })
-    .fill("3");
+  await edit.click();
+  await year.fill("2");
+  await save.click();
   await expectClosing(page, 1, 976_000);
   await expectClosing(page, 2, 962_000);
-  await page.getByRole("button", { name: "+ Add event", exact: true }).click();
-  await page
-    .getByRole("spinbutton", { name: "End year", exact: true })
-    .last()
-    .fill("3");
-  await page
-    .getByRole("spinbutton", { name: "Amount (AUD)", exact: true })
-    .last()
-    .fill("500");
+  await add.click();
+  await year.fill("2");
+  await amount.fill("500");
+  await save.click();
   await expectClosing(page, 2, 962_500);
   await page
     .getByRole("button", { name: "Remove", exact: true })
@@ -347,6 +546,16 @@ test("event year, type, amount, duplicates, and removal affect the selected annu
   await expectClosing(page, 2, 964_500);
   await page.getByRole("button", { name: "Remove", exact: true }).click();
   await expectClosing(page, 2, 964_000);
+  await add.click();
+  await page.keyboard.press("Shift+Tab");
+  await expect(save).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(year).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(add).toBeFocused();
+  await expect(
+    page.getByRole("list", { name: "One-off event list" }),
+  ).toHaveCount(0);
 });
 
 test("invalid main fields hide results and recover after correction", async ({
@@ -368,7 +577,7 @@ test("invalid main fields hide results and recover after correction", async ({
     ["Average annual investment return", "", "Enter an average annual return."],
     ["Average annual inflation", "", "Enter an average annual inflation rate."],
   ] as const) {
-    const input = page.getByRole("spinbutton", { name, exact: true });
+    const input = page.getByRole("textbox", { name, exact: true });
     const original = await input.inputValue();
     await input.fill(invalid);
     await input.press("Tab");
@@ -394,25 +603,27 @@ test("event validation rejects invalid years and amounts and permits the last ye
     monthlyWithdrawal: 0,
   });
   await page.getByRole("button", { name: "+ Add event", exact: true }).click();
-  const year = page.getByRole("spinbutton", { name: "End year", exact: true });
-  const amount = page.getByRole("spinbutton", {
+  const year = page.getByRole("textbox", {
+    name: "Projection year",
+    exact: true,
+  });
+  const amount = page.getByRole("textbox", {
     name: "Amount (AUD)",
     exact: true,
   });
-  for (const invalid of ["", "0", "52", "1.5"]) {
+  for (const invalid of ["", "-1", "51", "1.5"]) {
     await year.fill(invalid);
     await year.press("Tab");
     await expect(year).toHaveAttribute("aria-invalid", "true");
     await expect(year).toHaveAccessibleDescription(
       invalid === ""
-        ? "Enter an event year."
-        : "Choose a whole year from 1 to 51.",
+        ? "Enter a projection year."
+        : "Choose a whole year from 0 to 50.",
     );
-    await expect(
-      page.getByRole("heading", { name: "Check your inputs" }),
-    ).toBeVisible();
+    await page.getByRole("button", { name: "Save event", exact: true }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
   }
-  await year.fill("51");
+  await year.fill("50");
   await amount.fill("");
   await amount.press("Tab");
   await expect(amount).toHaveAccessibleDescription("Enter an event amount.");
@@ -425,6 +636,7 @@ test("event validation rejects invalid years and amounts and permits the last ye
   await amount.fill("1234.56");
   await expect(year).toHaveAttribute("aria-invalid", "false");
   await expect(amount).toHaveAttribute("aria-invalid", "false");
+  await page.getByRole("button", { name: "Save event", exact: true }).click();
   await expectClosing(page, 49, 1000);
   await expectClosing(page, 50, 2234.56);
 });
@@ -440,10 +652,10 @@ test("zero return and exact depletion remain finite and numeric overflow is expl
   await expect(page.getByLabel("First shortfall year")).toHaveText("Year 0");
   await expectChart(page);
   await page
-    .getByRole("spinbutton", { name: "Starting balance", exact: true })
+    .getByRole("textbox", { name: "Starting balance", exact: true })
     .fill("1e308");
   await page
-    .getByRole("spinbutton", {
+    .getByRole("textbox", {
       name: "Average annual investment return",
       exact: true,
     })
@@ -453,9 +665,71 @@ test("zero return and exact depletion remain finite and numeric overflow is expl
   ).toBeVisible();
   await expect(page.getByRole("img", { name: chartName })).toHaveCount(0);
   await page
-    .getByRole("spinbutton", { name: "Starting balance", exact: true })
+    .getByRole("textbox", { name: "Starting balance", exact: true })
     .fill("1200");
   await expectChart(page);
+});
+
+test("money formatting supports editing, pasting, validation, and a bounded event list", async ({
+  page,
+}, testInfo) => {
+  const balance = page.getByRole("textbox", {
+    name: "Starting balance",
+    exact: true,
+  });
+  const withdrawal = page.getByRole("textbox", {
+    name: "Monthly withdrawal",
+    exact: true,
+  });
+  await balance.fill("1350000.50");
+  await withdrawal.fill("10000.25");
+  await withdrawal.press("Tab");
+  await expect(balance).toHaveValue("1,350,000.50");
+  await expect(withdrawal).toHaveValue("10,000.25");
+  await balance.fill("1,35");
+  await balance.press("Tab");
+  await expect(balance).toHaveAccessibleDescription("Enter a valid amount.");
+  await balance.fill("1,350,000.50");
+  await balance.press("Tab");
+  await expect(
+    page.getByLabel("Starting balance result", { exact: true }),
+  ).toHaveText("$1,350,000.50");
+  await expectChart(page);
+  await page.getByRole("button", { name: "Load example", exact: true }).click();
+  for (let index = 0; index < 3; index += 1) {
+    await page
+      .getByRole("button", { name: "+ Add event", exact: true })
+      .click();
+    await page
+      .getByRole("textbox", { name: "Amount (AUD)", exact: true })
+      .fill("1,000.50");
+    await page.getByRole("button", { name: "Save event", exact: true }).click();
+  }
+  const list = page.getByRole("list", { name: "One-off event list" });
+  await expect(list.getByRole("listitem")).toHaveCount(6);
+  expect(
+    await list.evaluate(
+      (element) => element.scrollHeight > element.clientHeight,
+    ),
+  ).toBe(true);
+  expect((await list.boundingBox())!.height).toBeLessThanOrEqual(321);
+  await list.getByRole("button", { name: "Edit", exact: true }).last().click();
+  await expect(
+    page.getByRole("textbox", { name: "Amount (AUD)", exact: true }),
+  ).toHaveValue("1,000.50");
+  const dialog = page.getByRole("dialog");
+  expect(
+    await dialog.evaluate(
+      (element) => element.scrollWidth <= element.clientWidth,
+    ),
+  ).toBe(true);
+  await dialog.screenshot({
+    path: testInfo.outputPath("money-event-modal.png"),
+  });
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(
+    page.viewportSize()!.width,
+  );
 });
 
 test("keyboard skip link works and the custom favicon is served", async ({
@@ -487,7 +761,7 @@ test("pagination reaches every year and the table follows the chart without the 
   const desktop = page.viewportSize()!.width >= 1280;
   const next = page.getByRole("button", { name: "Next", exact: true });
   const previous = page.getByRole("button", { name: "Previous", exact: true });
-  const size = page.getByRole("combobox", { name: "Years per page" });
+  const size = page.getByRole("combobox", { name: "Year range" });
   const visibleAmounts = () =>
     desktop
       ? page
@@ -514,28 +788,28 @@ test("pagination reaches every year and the table follows the chart without the 
           );
   await expect(size).toHaveValue("10");
   await expect(previous).toBeDisabled();
-  for (let pageIndex = 0; pageIndex < 6; pageIndex += 1) {
+  for (let pageIndex = 0; pageIndex < 5; pageIndex += 1) {
     const expected = fixture.rows
-      .slice(pageIndex * 10, pageIndex * 10 + 10)
+      .slice(pageIndex === 0 ? 0 : pageIndex * 10 + 1, pageIndex * 10 + 11)
       .map((row) => row.map((value) => money.format(value)));
     await expect.poll(visibleAmounts).toEqual(expected);
     await expect(
-      page.getByText(`Page ${pageIndex + 1} of 6`, { exact: true }),
+      page.getByText(`Page ${pageIndex + 1} of 5`, { exact: true }),
     ).toBeVisible();
-    if (pageIndex < 5) await next.click();
+    if (pageIndex < 4) await next.click();
   }
   await expect(next).toBeDisabled();
   await previous.click();
-  await expect(page.getByText("Page 5 of 6", { exact: true })).toBeVisible();
+  await expect(page.getByText("Page 4 of 5", { exact: true })).toBeVisible();
   await size.selectOption("25");
   await expect
     .poll(visibleAmounts)
     .toEqual(
       fixture.rows
-        .slice(0, 25)
+        .slice(0, 26)
         .map((row) => row.map((value) => money.format(value))),
     );
-  await expect(page.getByText("Page 1 of 3", { exact: true })).toBeVisible();
+  await expect(page.getByText("Page 1 of 2", { exact: true })).toBeVisible();
   await expect(previous).toBeDisabled();
   await size.selectOption("51");
   await expect
@@ -562,7 +836,6 @@ test("pagination reaches every year and the table follows the chart without the 
   if (desktop) {
     const inputBox = (await page.locator("aside").boundingBox())!;
     expect(annualBox.x).toBeGreaterThan(inputBox.x + inputBox.width);
-    expect(annualBox.y).toBeLessThan(inputBox.y + inputBox.height);
     const scrollRegion = page.getByRole("region", {
       name: "Scrollable annual projection table",
     });

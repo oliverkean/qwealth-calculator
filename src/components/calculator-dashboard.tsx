@@ -2,13 +2,15 @@
 
 import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
+import { NumericInput } from "@/components/numeric-input";
+import { EventEditor } from "@/components/event-editor";
 import { ProjectionTable } from "@/components/projection-table";
+import { parseMoneyInput } from "@/lib/money-input";
+import { getEventFieldErrors, type EventDraft } from "@/lib/event-input";
 import {
   calculateProjection,
   defaultInputs,
-  PROJECTION_YEARS,
   type CalculatorInputs,
-  type EventType,
 } from "@/lib/calculator";
 
 /** Render the responsive chart in the browser, where its container can be measured. */
@@ -28,19 +30,13 @@ const currency = new Intl.NumberFormat("en-AU", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
-type FormEvent = {
-  id: string;
-  endYear: string;
-  type: EventType;
-  amount: string;
-};
 /** Keep editable values as strings so a cleared field remains distinct from zero. */
 type FormState = {
   startingBalance: string;
   annualReturn: string;
   annualInflation: string;
   monthlyWithdrawal: string;
-  events: FormEvent[];
+  events: EventDraft[];
 };
 type MainField =
   "startingBalance" | "annualReturn" | "annualInflation" | "monthlyWithdrawal";
@@ -70,8 +66,9 @@ function createExampleForm(): FormState {
     annualInflation: String(defaultInputs.annualInflation * 100),
     monthlyWithdrawal: String(defaultInputs.monthlyWithdrawal),
     events: defaultInputs.events.map((event) => ({
-      ...event,
-      endYear: String(event.endYear),
+      id: event.id,
+      projectionYear: String(event.endYear - 1),
+      type: event.type,
       amount: String(event.amount),
     })),
   };
@@ -81,17 +78,21 @@ function createExampleForm(): FormState {
 const readNumber = (value: string) =>
   value.trim() === "" ? Number.NaN : Number(value);
 
-/** Convert form strings into engine inputs; a displayed 7.5% becomes 0.075. */
+/**
+ * Convert form strings into engine inputs; a displayed 7.5% becomes 0.075.
+ * Projection year 0 ends the first annual period, so its engine end-year is 1.
+ */
 function parseForm(form: FormState): CalculatorInputs {
   return {
-    startingBalance: readNumber(form.startingBalance),
+    startingBalance: parseMoneyInput(form.startingBalance),
     annualReturn: readNumber(form.annualReturn) / 100,
     annualInflation: readNumber(form.annualInflation) / 100,
-    monthlyWithdrawal: readNumber(form.monthlyWithdrawal),
+    monthlyWithdrawal: parseMoneyInput(form.monthlyWithdrawal),
     events: form.events.map((event) => ({
-      ...event,
-      endYear: readNumber(event.endYear),
-      amount: readNumber(event.amount),
+      id: event.id,
+      endYear: readNumber(event.projectionYear) + 1,
+      type: event.type,
+      amount: parseMoneyInput(event.amount),
     })),
   };
 }
@@ -103,7 +104,7 @@ function parseForm(form: FormState): CalculatorInputs {
 function getFieldErrors(form: FormState): Record<string, string> {
   const errors: Record<string, string> = {};
   for (const field of ["startingBalance", "monthlyWithdrawal"] as const) {
-    const value = readNumber(form[field]);
+    const value = parseMoneyInput(form[field]);
     if (form[field].trim() === "") {
       errors[field] =
         field === "startingBalance"
@@ -132,21 +133,7 @@ function getFieldErrors(form: FormState): Record<string, string> {
     errors.annualInflation = "Inflation must be above -100%.";
   }
   form.events.forEach((event) => {
-    const year = readNumber(event.endYear);
-    const amount = readNumber(event.amount);
-    if (event.endYear.trim() === "") {
-      errors[`year-${event.id}`] = "Enter an event year.";
-    } else if (!Number.isInteger(year) || year < 1 || year > PROJECTION_YEARS) {
-      errors[`year-${event.id}`] =
-        `Choose a whole year from 1 to ${PROJECTION_YEARS}.`;
-    }
-    if (event.amount.trim() === "") {
-      errors[`amount-${event.id}`] = "Enter an event amount.";
-    } else if (!Number.isFinite(amount)) {
-      errors[`amount-${event.id}`] = "Enter a valid amount.";
-    } else if (amount < 0) {
-      errors[`amount-${event.id}`] = "Amount cannot be negative.";
-    }
+    Object.assign(errors, getEventFieldErrors(event));
   });
   return errors;
 }
@@ -159,6 +146,7 @@ type NumberFieldProps = {
   suffix?: string;
   hint?: string;
   error?: string;
+  formatAsMoney?: boolean;
   onChange: (value: string) => void;
   onBlur: () => void;
 };
@@ -171,6 +159,7 @@ function NumberField({
   suffix,
   hint,
   error,
+  formatAsMoney,
   onChange,
   onBlur,
 }: NumberFieldProps) {
@@ -187,16 +176,14 @@ function NumberField({
             {prefix}
           </span>
         )}
-        <input
+        <NumericInput
           id={id}
-          type="number"
-          inputMode="decimal"
-          step="any"
           value={value}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={onChange}
           onBlur={onBlur}
-          aria-invalid={Boolean(error)}
-          aria-describedby={
+          error={error}
+          formatAsMoney={formatAsMoney}
+          descriptionId={
             error ? `${id}-error` : hint ? `${id}-hint` : undefined
           }
           className="h-full min-w-0 flex-1 bg-transparent px-3 text-base font-medium tabular-nums text-ink outline-none"
@@ -232,6 +219,10 @@ function NumberField({
 export default function CalculatorDashboard() {
   const [form, setForm] = useState<FormState>(createInitialForm);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [eventEditor, setEventEditor] = useState<{
+    event: EventDraft;
+    isNew: boolean;
+  } | null>(null);
   const fieldErrors = useMemo(() => getFieldErrors(form), [form]);
   const inputs = useMemo(() => parseForm(form), [form]);
   const { projection, calculationError } = useMemo(() => {
@@ -260,13 +251,6 @@ export default function CalculatorDashboard() {
     touched[key] ? fieldErrors[key] : undefined;
   const updateField = (field: MainField, value: string) =>
     setForm((current) => ({ ...current, [field]: value }));
-  const updateEvent = (id: string, changes: Partial<FormEvent>) =>
-    setForm((current) => ({
-      ...current,
-      events: current.events.map((event) =>
-        event.id === id ? { ...event, ...changes } : event,
-      ),
-    }));
   const hasVisibleErrors = Object.keys(touched).some((key) =>
     Boolean(fieldErrors[key]),
   );
@@ -346,6 +330,7 @@ export default function CalculatorDashboard() {
               <NumberField
                 id="startingBalance"
                 label="Starting balance"
+                formatAsMoney
                 value={form.startingBalance}
                 prefix="$"
                 error={errorFor("startingBalance")}
@@ -373,6 +358,7 @@ export default function CalculatorDashboard() {
               <NumberField
                 id="monthlyWithdrawal"
                 label="Monthly withdrawal"
+                formatAsMoney
                 value={form.monthlyWithdrawal}
                 prefix="$"
                 hint="Adjusted yearly for inflation."
@@ -388,160 +374,92 @@ export default function CalculatorDashboard() {
                   <h3 className="text-base font-semibold tracking-[-0.02em]">
                     One-off events
                   </h3>
-                  <p className="mt-1 text-xs leading-5 text-muted">
-                    Applied at the end of the selected year.
+                  <p
+                    id="event-year-hint"
+                    className="mt-1 text-xs leading-5 text-muted"
+                  >
+                    Applied at the end of the selected projection year. Year 0
+                    covers the first 12 months.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() =>
-                    setForm((current) => ({
-                      ...current,
-                      events: [
-                        ...current.events,
-                        {
-                          id: crypto.randomUUID(),
-                          endYear: "1",
-                          type: "windfall",
-                          amount: "0",
-                        },
-                      ],
-                    }))
+                    setEventEditor({
+                      event: {
+                        id: crypto.randomUUID(),
+                        projectionYear: "0",
+                        type: "windfall",
+                        amount: "0",
+                      },
+                      isNew: true,
+                    })
                   }
                   className="min-h-11 shrink-0 rounded-lg border border-line px-3 text-xs font-bold transition-colors hover:border-orange hover:text-orange focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange"
                 >
                   + Add event
                 </button>
               </div>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-                {form.events.length === 0 && (
-                  <p className="rounded-lg bg-[#f6f4f0] p-4 text-sm text-muted">
-                    No one-off events. Add a withdrawal or windfall to test a
-                    scenario.
-                  </p>
-                )}
-                {form.events.map((event, index) => (
-                  <div
-                    key={event.id}
-                    className="rounded-xl border border-line bg-[#fcfbf9] p-3"
-                  >
-                    <div className="mb-2 flex items-center justify-between">
-                      <span className="text-xs font-bold uppercase tracking-[0.08em] text-muted">
-                        Event {index + 1}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setForm((current) => ({
-                            ...current,
-                            events: current.events.filter(
-                              (item) => item.id !== event.id,
-                            ),
-                          }))
-                        }
-                        className="min-h-11 rounded-md px-2 text-xs font-semibold text-muted underline-offset-4 hover:text-[#a92f19] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-[74px_minmax(0,1fr)] gap-2">
-                      <div>
-                        <label
-                          htmlFor={`year-${event.id}`}
-                          className="mb-1 block text-xs font-semibold"
-                        >
-                          End year
-                        </label>
-                        <input
-                          id={`year-${event.id}`}
-                          type="number"
-                          min="1"
-                          max={PROJECTION_YEARS}
-                          step="1"
-                          value={event.endYear}
-                          onChange={(value) =>
-                            updateEvent(event.id, {
-                              endYear: value.target.value,
-                            })
-                          }
-                          onBlur={() => markTouched(`year-${event.id}`)}
-                          aria-invalid={Boolean(errorFor(`year-${event.id}`))}
-                          aria-describedby={
-                            errorFor(`year-${event.id}`)
-                              ? `year-${event.id}-error`
-                              : undefined
-                          }
-                          className="event-control"
-                        />
+              {form.events.length === 0 ? (
+                <p className="mt-4 rounded-lg bg-[#f6f4f0] p-4 text-sm text-muted">
+                  No one-off events. Add a withdrawal or windfall to test a
+                  scenario.
+                </p>
+              ) : (
+                <ul
+                  aria-label="One-off event list"
+                  className="mt-4 max-h-80 space-y-2 overflow-y-auto rounded-xl border border-line p-2"
+                >
+                  {form.events.map((event, index) => (
+                    <li
+                      key={event.id}
+                      aria-label={`Event ${index + 1}`}
+                      className="rounded-lg bg-[#fcfbf9] px-3 py-2"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold">
+                            {event.type === "windfall"
+                              ? "Windfall"
+                              : "Withdrawal"}
+                          </p>
+                          <p className="mt-1 text-xs text-muted">
+                            End of Year {event.projectionYear}
+                          </p>
+                        </div>
+                        <p className="text-sm font-semibold tabular-nums [overflow-wrap:anywhere]">
+                          {currency.format(parseMoneyInput(event.amount))}
+                        </p>
                       </div>
-                      <div>
-                        <label
-                          htmlFor={`type-${event.id}`}
-                          className="mb-1 block text-xs font-semibold"
-                        >
-                          Type
-                        </label>
-                        <select
-                          id={`type-${event.id}`}
-                          value={event.type}
-                          onChange={(value) =>
-                            updateEvent(event.id, {
-                              type: value.target.value as EventType,
-                            })
+                      <div className="mt-1 flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setEventEditor({ event, isNew: false })
                           }
-                          className="event-control cursor-pointer"
+                          className="min-h-11 rounded-md px-3 text-xs font-semibold text-muted hover:text-orange focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange"
                         >
-                          <option value="windfall">Windfall</option>
-                          <option value="withdrawal">Withdrawal</option>
-                        </select>
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setForm((current) => ({
+                              ...current,
+                              events: current.events.filter(
+                                (item) => item.id !== event.id,
+                              ),
+                            }))
+                          }
+                          className="min-h-11 rounded-md px-3 text-xs font-semibold text-muted hover:text-[#a92f19] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange"
+                        >
+                          Remove
+                        </button>
                       </div>
-                    </div>
-                    <div className="mt-2">
-                      <label
-                        htmlFor={`amount-${event.id}`}
-                        className="mb-1 block text-xs font-semibold"
-                      >
-                        Amount (AUD)
-                      </label>
-                      <input
-                        id={`amount-${event.id}`}
-                        type="number"
-                        inputMode="decimal"
-                        min="0"
-                        step="any"
-                        value={event.amount}
-                        onChange={(value) =>
-                          updateEvent(event.id, { amount: value.target.value })
-                        }
-                        onBlur={() => markTouched(`amount-${event.id}`)}
-                        aria-invalid={Boolean(errorFor(`amount-${event.id}`))}
-                        aria-describedby={
-                          errorFor(`amount-${event.id}`)
-                            ? `amount-${event.id}-error`
-                            : undefined
-                        }
-                        className="event-control"
-                      />
-                    </div>
-                    {errorFor(`year-${event.id}`) && (
-                      <p
-                        id={`year-${event.id}-error`}
-                        className="mt-2 text-xs text-[#a92f19]"
-                      >
-                        {errorFor(`year-${event.id}`)}
-                      </p>
-                    )}
-                    {errorFor(`amount-${event.id}`) && (
-                      <p
-                        id={`amount-${event.id}-error`}
-                        className="mt-2 text-xs text-[#a92f19]"
-                      >
-                        {errorFor(`amount-${event.id}`)}
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </aside>
 
@@ -650,17 +568,16 @@ export default function CalculatorDashboard() {
                       </h2>
                     </div>
                     <span className="text-xs text-muted">
-                      AUD · year-end balance
+                      AUD · year-start balance
                     </span>
                   </div>
                   <BalanceChart
                     rows={projection.rows}
-                    startingBalance={inputs.startingBalance}
+                    depletionEndYear={projection.depletionEndYear}
                   />
                   <p className="mt-3 text-xs leading-5 text-muted">
-                    The dashed line adjusts future balances for inflation to
-                    show their estimated purchasing power in today&apos;s
-                    dollars.
+                    Each pair compares the opening balance with its purchasing
+                    power in today&apos;s dollars.
                   </p>
                 </div>
                 <section
@@ -685,10 +602,6 @@ export default function CalculatorDashboard() {
                     Select a year to view its opening balance, withdrawals, and
                     windfalls.
                   </p>
-                  <p className="mb-4 hidden text-sm leading-6 text-muted xl:block">
-                    Scroll sideways within the table to see all columns if
-                    needed.
-                  </p>
                   <ProjectionTable rows={projection.rows} />
                   <p className="mt-4 text-sm leading-6 text-muted">
                     Year 0 covers the first 12 months. A negative closing
@@ -701,17 +614,29 @@ export default function CalculatorDashboard() {
           </section>
         </div>
       </main>
+      {eventEditor && (
+        <EventEditor
+          key={eventEditor.event.id}
+          event={eventEditor.event}
+          isNew={eventEditor.isNew}
+          onCancel={() => setEventEditor(null)}
+          onSave={(event) => {
+            setForm((current) => ({
+              ...current,
+              events: eventEditor.isNew
+                ? [...current.events, event]
+                : current.events.map((item) =>
+                    item.id === event.id ? event : item,
+                  ),
+            }));
+            setEventEditor(null);
+          }}
+        />
+      )}
       <footer className="border-t border-line bg-white px-5 py-8 text-xs leading-6 text-muted sm:px-8 lg:px-12">
         <div className="mx-auto flex max-w-[1824px] flex-col justify-between gap-3 sm:flex-row">
           <span className="font-bold text-ink">
             Q Wealth · Planning calculator
-          </span>
-          <span className="max-w-[750px]">
-            For general information only. Projections use the values you enter
-            and assume constant returns and inflation. They are estimates, not
-            financial advice or a guarantee of future results. Past performance
-            is not indicative of future results. Consider speaking with a
-            qualified adviser before making financial decisions.
           </span>
         </div>
       </footer>

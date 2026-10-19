@@ -8,7 +8,7 @@ import type { ProjectionRow } from "@/lib/calculator";
 const { chartRender } = vi.hoisted(() => ({ chartRender: vi.fn() }));
 vi.mock("next/dynamic", () => ({
   default: () =>
-    function Chart(props: { rows: ProjectionRow[]; startingBalance: number }) {
+    function Chart(props: { rows: ProjectionRow[] }) {
       chartRender(props);
       return <div role="img" aria-label="Balance chart" />;
     },
@@ -36,7 +36,7 @@ function renderExample() {
 }
 
 function expectAnnualRow(year: number, expected: number[]) {
-  fireEvent.change(screen.getByRole("combobox", { name: "Years per page" }), {
+  fireEvent.change(screen.getByRole("combobox", { name: "Year range" }), {
     target: { value: "51" },
   });
   const table = screen.getByRole("table");
@@ -49,6 +49,67 @@ function expectAnnualRow(year: number, expected: number[]) {
 }
 
 describe("calculator page", () => {
+  it("accepts grouped monetary inputs without rounding them and rejects malformed groups", () => {
+    renderExample();
+    const fixture = fixtures.find(
+      (item) => item.name === "Fractional amounts",
+    )!;
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Average annual investment return" }),
+      {
+        target: { value: String(fixture.inputs.annualReturn * 100) },
+      },
+    );
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Average annual inflation" }),
+      {
+        target: { value: String(fixture.inputs.annualInflation * 100) },
+      },
+    );
+    for (const [name, amount] of [
+      ["Starting balance", fixture.inputs.startingBalance],
+      ["Monthly withdrawal", fixture.inputs.monthlyWithdrawal],
+    ] as const) {
+      fireEvent.change(screen.getByRole("textbox", { name }), {
+        target: {
+          value: new Intl.NumberFormat("en-AU", {
+            maximumFractionDigits: 10,
+          }).format(amount),
+        },
+      });
+    }
+    expectAnnualRow(0, fixture.rows[0]);
+    expectAnnualRow(50, fixture.rows[50]);
+    const balance = screen.getByRole("textbox", { name: "Starting balance" });
+    fireEvent.change(balance, { target: { value: "1,35" } });
+    fireEvent.blur(balance);
+    expect(balance).toHaveAccessibleDescription("Enter a valid amount.");
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  });
+
+  it("discards unsaved event drafts without affecting active rows", async () => {
+    const user = userEvent.setup();
+    renderExample();
+    const expected = fixtures.find((item) => item.name === "Default")!.rows;
+    await user.click(screen.getByRole("button", { name: "+ Add event" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Amount (AUD)" }), {
+      target: { value: "900000" },
+    });
+    expectAnnualRow(0, expected[0]);
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getAllByRole("listitem")).toHaveLength(3);
+    await user.click(screen.getAllByRole("button", { name: "Edit" })[0]);
+    fireEvent.change(screen.getByRole("textbox", { name: "Amount (AUD)" }), {
+      target: { value: "-1" },
+    });
+    await user.click(screen.getByRole("button", { name: "Save event" }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expectAnnualRow(1, expected[1]);
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expectAnnualRow(1, expected[1]);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
   it("starts with default rates and calculates the client's entered values, then clears the scenario", async () => {
     const user = userEvent.setup();
     const fixture = fixtures.find(
@@ -59,19 +120,19 @@ describe("calculator page", () => {
       screen.getByRole("heading", { name: "Start your projection" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("spinbutton", { name: "Starting balance" }),
-    ).toHaveValue(null);
+      screen.getByRole("textbox", { name: "Starting balance" }),
+    ).toHaveValue("");
     expect(
-      screen.getByRole("spinbutton", { name: "Monthly withdrawal" }),
-    ).toHaveValue(null);
+      screen.getByRole("textbox", { name: "Monthly withdrawal" }),
+    ).toHaveValue("");
     expect(
-      screen.getByRole("spinbutton", {
+      screen.getByRole("textbox", {
         name: "Average annual investment return",
       }),
-    ).toHaveValue(7.5);
+    ).toHaveValue("7.5");
     expect(
-      screen.getByRole("spinbutton", { name: "Average annual inflation" }),
-    ).toHaveValue(3);
+      screen.getByRole("textbox", { name: "Average annual inflation" }),
+    ).toHaveValue("3");
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
     expect(chartRender).not.toHaveBeenCalled();
     const values = [
@@ -81,7 +142,7 @@ describe("calculator page", () => {
       ["Monthly withdrawal", fixture.inputs.monthlyWithdrawal],
     ] as const;
     values.forEach(([name, value]) =>
-      fireEvent.change(screen.getByRole("spinbutton", { name }), {
+      fireEvent.change(screen.getByRole("textbox", { name }), {
         target: { value: String(value) },
       }),
     );
@@ -93,8 +154,8 @@ describe("calculator page", () => {
     expect(screen.queryByText("Event 1")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Clear" }));
     screen
-      .getAllByRole("spinbutton")
-      .forEach((field) => expect(field).toHaveValue(null));
+      .getAllByRole("textbox")
+      .forEach((field) => expect(field).toHaveValue(""));
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("img", { name: "Balance chart" }),
@@ -104,11 +165,11 @@ describe("calculator page", () => {
   it("uses the initial rates and recalculates when the user replaces them", () => {
     render(<Home />);
     fireEvent.change(
-      screen.getByRole("spinbutton", { name: "Starting balance" }),
+      screen.getByRole("textbox", { name: "Starting balance" }),
       { target: { value: "1650000" } },
     );
     fireEvent.change(
-      screen.getByRole("spinbutton", { name: "Monthly withdrawal" }),
+      screen.getByRole("textbox", { name: "Monthly withdrawal" }),
       { target: { value: "10000" } },
     );
     expectAnnualRow(
@@ -126,9 +187,10 @@ describe("calculator page", () => {
       ["Average annual inflation", fixture.inputs.annualInflation * 100],
       ["Monthly withdrawal", fixture.inputs.monthlyWithdrawal],
     ] as const) {
-      const field = screen.getByRole("spinbutton", { name });
+      const field = screen.getByRole("textbox", { name });
+      fireEvent.focus(field);
       fireEvent.change(field, { target: { value: String(value) } });
-      expect(field).toHaveValue(value);
+      expect(field).toHaveValue(String(value));
     }
     expectAnnualRow(0, fixture.rows[0]);
     expectAnnualRow(9, fixture.rows[9]);
@@ -161,17 +223,64 @@ describe("calculator page", () => {
     expect(screen.queryByText("Planning tools / 01")).not.toBeInTheDocument();
     expect(screen.queryByText("Your assumptions")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("spinbutton", {
+      screen.getByRole("textbox", {
         name: "Average annual investment return",
       }),
     ).not.toHaveAttribute("aria-describedby");
     expect(
-      screen.getByRole("spinbutton", { name: "Monthly withdrawal" }),
+      screen.getByRole("textbox", { name: "Monthly withdrawal" }),
     ).toHaveAccessibleDescription("Adjusted yearly for inflation.");
     expect(screen.getByRole("table")).toBeInTheDocument();
     expect(
+      within(screen.getByRole("list", { name: "One-off event list" }))
+        .getAllByRole("listitem")
+        .map((item) => within(item).getByText(/End of Year/).textContent),
+    ).toEqual(["End of Year 1", "End of Year 5", "End of Year 9"]);
+    expect(
+      screen.queryByRole("textbox", { name: "Projection year" }),
+    ).not.toBeInTheDocument();
+    expect(
       screen.getByRole("rowheader", { name: /Year 0/ }),
     ).toBeInTheDocument();
+  });
+
+  it("applies a selected projection year to the same table row", async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Starting balance" }),
+      { target: { value: "1350000" } },
+    );
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Monthly withdrawal" }),
+      { target: { value: "10000" } },
+    );
+    await user.click(screen.getByRole("button", { name: "+ Add event" }));
+    const year = screen.getByRole("textbox", { name: "Projection year" });
+    expect(year).toHaveValue("0");
+    expect(year).toHaveAttribute("inputmode", "numeric");
+    expect(year).toHaveAccessibleDescription(
+      "Applied at the end of the selected projection year. Year 0 covers the first 12 months.",
+    );
+    fireEvent.change(screen.getByRole("textbox", { name: "Amount (AUD)" }), {
+      target: { value: "1500" },
+    });
+    await user.click(screen.getByRole("button", { name: "Save event" }));
+    expectAnnualRow(0, [1350000, 1350000, 120000, 0, 1500, 1328678.86]);
+    const initialChart = chartRender.mock.calls.at(-1)?.[0];
+    expect(initialChart.rows[0].lumpSumWindfalls).toBe(1500);
+    expect(initialChart.rows[1].lumpSumWindfalls).toBe(0);
+
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Projection year" }), {
+      target: { value: "1" },
+    });
+    await user.click(screen.getByRole("button", { name: "Save event" }));
+    expectAnnualRow(0, [1350000, 1350000, 120000, 0, 0, 1327178.86]);
+    expectAnnualRow(1, [1327178.86, 1288523.16, 123600, 0, 1500, 1300424]);
+    const movedChart = chartRender.mock.calls.at(-1)?.[0];
+    expect(movedChart.rows[0].lumpSumWindfalls).toBe(0);
+    expect(movedChart.rows[1].lumpSumWindfalls).toBe(1500);
   });
 
   it("paginates every year, disables boundary controls, and resets when page size changes", () => {
@@ -186,23 +295,25 @@ describe("calculator page", () => {
         .map((cell) => cell.textContent);
     expect(previous).toBeDisabled();
     expect(rowLabels()).toEqual(
-      Array.from({ length: 10 }, (_, year) => `Year ${year}`),
+      Array.from({ length: 11 }, (_, year) => `Year ${year}`),
     );
-    for (let page = 1; page < 6; page += 1) fireEvent.click(next);
-    expect(rowLabels()).toEqual(["Year 50"]);
+    for (let page = 1; page < 5; page += 1) fireEvent.click(next);
+    expect(rowLabels()).toEqual(
+      Array.from({ length: 10 }, (_, year) => `Year ${year + 41}`),
+    );
     expect(next).toBeDisabled();
     fireEvent.click(previous);
     expect(rowLabels()).toEqual(
-      Array.from({ length: 10 }, (_, year) => `Year ${year + 40}`),
+      Array.from({ length: 10 }, (_, year) => `Year ${year + 31}`),
     );
-    fireEvent.change(screen.getByRole("combobox", { name: "Years per page" }), {
+    fireEvent.change(screen.getByRole("combobox", { name: "Year range" }), {
       target: { value: "25" },
     });
-    expect(rowLabels()).toHaveLength(25);
+    expect(rowLabels()).toHaveLength(26);
     expect(rowLabels()[0]).toBe("Year 0");
     expect(previous).toBeDisabled();
-    expect(screen.getByText("Page 1 of 3")).toBeInTheDocument();
-    fireEvent.change(screen.getByRole("combobox", { name: "Years per page" }), {
+    expect(screen.getByText("Page 1 of 2")).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("combobox", { name: "Year range" }), {
       target: { value: "51" },
     });
     expect(rowLabels()).toHaveLength(51);
@@ -212,13 +323,14 @@ describe("calculator page", () => {
   it("updates the projection and restores the optional example", async () => {
     const user = userEvent.setup();
     renderExample();
-    const withdrawal = screen.getByRole("spinbutton", {
+    const withdrawal = screen.getByRole("textbox", {
       name: /Monthly withdrawal/,
     });
+    await user.click(withdrawal);
     fireEvent.change(withdrawal, { target: { value: "0" } });
     expect(screen.getByText("51+ years")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Load example" }));
-    expect(withdrawal).toHaveValue(10000);
+    expect(withdrawal).toHaveValue("10,000");
     expect(screen.getByLabelText("First shortfall year")).toHaveTextContent(
       "Year 21",
     );
@@ -227,7 +339,7 @@ describe("calculator page", () => {
   it("shows inline validation and lets users add and remove events", async () => {
     const user = userEvent.setup();
     renderExample();
-    const balance = screen.getByRole("spinbutton", {
+    const balance = screen.getByRole("textbox", {
       name: /Starting balance/,
     });
     fireEvent.change(balance, { target: { value: "-1" } });
@@ -237,9 +349,14 @@ describe("calculator page", () => {
       screen.getByRole("heading", { name: "Check your inputs" }),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "+ Add event" }));
-    expect(screen.getByText("Event 4")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save event" }));
+    expect(
+      screen.getByRole("listitem", { name: "Event 4" }),
+    ).toBeInTheDocument();
     await user.click(screen.getAllByRole("button", { name: "Remove" })[3]);
-    expect(screen.queryByText("Event 4")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("listitem", { name: "Event 4" }),
+    ).not.toBeInTheDocument();
   });
 
   it.each(
@@ -265,7 +382,7 @@ describe("calculator page", () => {
         ["Monthly withdrawal", fixture.inputs.monthlyWithdrawal],
       ] as const;
       values.forEach(([name, value]) =>
-        fireEvent.change(screen.getByRole("spinbutton", { name }), {
+        fireEvent.change(screen.getByRole("textbox", { name }), {
           target: { value: String(value) },
         }),
       );
@@ -287,9 +404,8 @@ describe("calculator page", () => {
 
       const chart = chartRender.mock.calls.at(-1)?.[0] as {
         rows: ProjectionRow[];
-        startingBalance: number;
       };
-      expect(chart.startingBalance).toBe(fixture.inputs.startingBalance);
+      expect(chart.rows[0].openingBalance).toBe(fixture.inputs.startingBalance);
       expect(chart.rows).toHaveLength(51);
       fixture.rows.forEach((expected, year) =>
         columns.forEach((column, index) =>
@@ -314,17 +430,17 @@ describe("calculator page", () => {
       const event = fixture.inputs.events[index];
       await user.click(screen.getByRole("button", { name: "+ Add event" }));
       fireEvent.change(
-        screen.getAllByRole("spinbutton", { name: "End year" })[index],
-        { target: { value: String(event.endYear) } },
+        screen.getByRole("textbox", { name: "Projection year" }),
+        { target: { value: String(event.endYear - 1) } },
       );
       await user.selectOptions(
-        screen.getAllByRole("combobox", { name: "Type" })[index],
+        screen.getByRole("combobox", { name: "Type" }),
         event.type,
       );
-      fireEvent.change(
-        screen.getAllByRole("spinbutton", { name: "Amount (AUD)" })[index],
-        { target: { value: String(event.amount) } },
-      );
+      fireEvent.change(screen.getByRole("textbox", { name: "Amount (AUD)" }), {
+        target: { value: String(event.amount) },
+      });
+      await user.click(screen.getByRole("button", { name: "Save event" }));
     }
     expectAnnualRow(1, fixture.rows[1]);
     expectAnnualRow(29, fixture.rows[29]);
@@ -359,7 +475,7 @@ describe("calculator page", () => {
     "validates %s (%s) and recovers after correction",
     (name, value, message) => {
       renderExample();
-      const field = screen.getByRole("spinbutton", { name });
+      const field = screen.getByRole("textbox", { name });
       const original = (field as HTMLInputElement).value;
       fireEvent.change(field, { target: { value } });
       fireEvent.blur(field);
@@ -382,7 +498,7 @@ describe("calculator page", () => {
     ["Average annual investment return", "-100"],
   ])("still accepts %s = %s", (name, value) => {
     renderExample();
-    const field = screen.getByRole("spinbutton", { name });
+    const field = screen.getByRole("textbox", { name });
     fireEvent.change(field, { target: { value } });
     fireEvent.blur(field);
     expect(field).toHaveAttribute("aria-invalid", "false");
@@ -394,20 +510,23 @@ describe("calculator page", () => {
 
   it("validates event year and amount, and supports an event in the last projected year", () => {
     renderExample();
-    const year = screen.getAllByRole("spinbutton", { name: "End year" })[0];
-    const amount = screen.getAllByRole("spinbutton", {
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
+    const year = screen.getAllByRole("textbox", {
+      name: "Projection year",
+    })[0];
+    const amount = screen.getAllByRole("textbox", {
       name: "Amount (AUD)",
     })[0];
     fireEvent.change(year, { target: { value: "" } });
     fireEvent.blur(year);
-    expect(year).toHaveAccessibleDescription("Enter an event year.");
-    fireEvent.change(year, { target: { value: "52" } });
+    expect(year).toHaveAccessibleDescription("Enter a projection year.");
+    fireEvent.change(year, { target: { value: "51" } });
     expect(year).toHaveAttribute("aria-invalid", "true");
     expect(year).toHaveAccessibleDescription(
-      "Choose a whole year from 1 to 51.",
+      "Choose a whole year from 0 to 50.",
     );
-    expect(screen.queryByRole("table")).not.toBeInTheDocument();
-    fireEvent.change(year, { target: { value: "51" } });
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    fireEvent.change(year, { target: { value: "50" } });
     fireEvent.change(amount, { target: { value: "" } });
     fireEvent.blur(amount);
     expect(amount).toHaveAccessibleDescription("Enter an event amount.");
@@ -417,6 +536,7 @@ describe("calculator page", () => {
     fireEvent.change(amount, { target: { value: "1234.56" } });
     expect(year).toHaveAttribute("aria-invalid", "false");
     expect(amount).toHaveAttribute("aria-invalid", "false");
+    fireEvent.click(screen.getByRole("button", { name: "Save event" }));
     expectAnnualRow(50, [0, 0, 0, 0, 1234.56, 1234.56]);
   });
 });

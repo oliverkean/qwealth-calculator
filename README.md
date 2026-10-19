@@ -30,7 +30,7 @@ npm run test:e2e                 # Build, then test the production app
 npm run test:e2e:report          # Open the HTML results and screenshots
 ```
 
-Playwright runs Chromium at widths of 375, 768, 1280, 1440, and 1920 pixels. It checks fresh client inputs, all annual financial fields, live chart paths, events, validation recovery, zero return, depletion, overflow, keyboard navigation, and the favicon. Pagination tests traverse all 51 years and check that the annual projection follows the chart instead of waiting for the sidebar to end. Each test also fails on browser errors or warnings. Page, chart, and paginated-results screenshots are attached to the report. Tests use an isolated production server on port 3100 and do not reuse the preview on port 3000. Generated reports, traces, and screenshots stay in ignored `playwright-report/` and `test-results/` folders. These runs cover Chromium, not Firefox or Safari.
+Playwright runs Chromium at widths of 375, 768, 1280, 1440, and 1920 pixels. It checks fresh client inputs, all annual financial fields, live chart columns, events, validation recovery, zero return, depletion, overflow, keyboard navigation, and the favicon. Pagination tests traverse all 51 years and check that the annual projection follows the chart instead of waiting for the sidebar to end. Each test also fails on browser errors or warnings. Page, chart, and paginated-results screenshots are attached to the report. Tests use an isolated production server on port 3100 and do not reuse the preview on port 3000. Generated reports, traces, and screenshots stay in ignored `playwright-report/` and `test-results/` folders. These runs cover Chromium, not Firefox or Safari.
 
 ## How the model works
 
@@ -46,7 +46,7 @@ The workbook has 51 rows, labelled Year 0 through Year 50. Year 0 is the **first
 
 The effective monthly rate is `(1 + annualReturn)^(1/12) - 1`. `FV` assumes the regular withdrawal is taken at the **end** of each month. At a zero monthly rate, the engine uses `openingBalance - regularWithdrawals`, avoiding division by zero. Integer exponents use repeated squaring to match Excel's binary rounding; using JavaScript's general power operation can cross a displayed half-cent boundary for some amounts. No intermediate values are rounded to cents; AUD formatting occurs only in the UI.
 
-The chart's nominal line uses column H directly. Its dashed inflation-adjusted **closing** line is a derived view: closing balance ÷ `(1 + inflation)^(endYear)`. The workbook itself provides today's-dollar **opening** value in column D; the annual table shows that exact workbook value.
+The chart uses paired columns for the opening balance and its today's-dollar value, matching columns C and D. It plots exactly the 51 projection rows, labelled Years 0–50, without an extra starting point. A dashed marker identifies the end of the first year with a zero or negative close. A compact chart summary explains the duration or finite projection horizon; later positive balances do not erase an earlier shortfall. Tooltips show both opening and closing balances, regular withdrawals, and nonzero one-off events. The chart does not estimate an exact depletion month.
 
 ### Non-obvious Excel behavior preserved
 

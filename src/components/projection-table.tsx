@@ -27,10 +27,14 @@ const columns = [
 export function ProjectionTable({ rows }: { rows: ProjectionRow[] }) {
   const [pageSize, setPageSize] = useState(10);
   const [pageIndex, setPageIndex] = useState(0);
-  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
+  // Include Year 0 in the first range, then advance in complete year intervals.
+  const pageCount = Math.max(1, Math.ceil((rows.length - 1) / pageSize));
   const currentPage = Math.min(pageIndex, pageCount - 1);
-  const firstRowIndex = currentPage * pageSize;
-  const visibleRows = rows.slice(firstRowIndex, firstRowIndex + pageSize);
+  const firstRowIndex = currentPage === 0 ? 0 : currentPage * pageSize + 1;
+  const visibleRows = rows.slice(
+    firstRowIndex,
+    (currentPage + 1) * pageSize + 1,
+  );
   const pageButtonClass =
     "min-h-11 rounded-lg border border-line bg-white px-4 text-sm font-semibold transition-colors hover:border-orange hover:text-orange focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line disabled:hover:text-ink";
 
@@ -39,10 +43,10 @@ export function ProjectionTable({ rows }: { rows: ProjectionRow[] }) {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-sm">
         <p role="status" aria-live="polite" className="text-muted">
           Showing years {visibleRows[0]?.year ?? 0}–
-          {visibleRows.at(-1)?.year ?? 0} of {rows.length}
+          {visibleRows.at(-1)?.year ?? 0}
         </p>
         <label className="flex items-center gap-3 font-medium">
-          Years per page
+          Year range
           <select
             value={pageSize}
             onChange={(event) => {
@@ -51,8 +55,8 @@ export function ProjectionTable({ rows }: { rows: ProjectionRow[] }) {
             }}
             className="min-h-11 rounded-lg border border-line bg-white px-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange"
           >
-            <option value={10}>10</option>
-            <option value={25}>25</option>
+            <option value={10}>10-year ranges</option>
+            <option value={25}>25-year ranges</option>
             <option value={51}>All 51</option>
           </select>
         </label>

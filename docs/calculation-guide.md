@@ -17,9 +17,9 @@ The three calculation functions return numbers. They do not update the screen or
 
 ## Inputs to results
 
-`CalculatorDashboard` receives the client's values as form strings. `parseForm` converts them to numbers and converts percentages to decimal rates: entering `7.5` produces `0.075`. The dashboard calls `calculateProjection` when the form is valid. The optional example supplies sample inputs only when requested.
+`CalculatorDashboard` receives the client's values as form strings. `parseForm` converts them to numbers and converts percentages to decimal rates: entering `7.5` produces `0.075`. Event inputs use projection years 0–50, matching the table. `parseForm` adds one to each selected projection year to produce the engine's end-year; loading an example subtracts one for display. The dashboard calls `calculateProjection` when the form is valid. The optional example supplies sample inputs only when requested.
 
-`calculateProjection` validates those numbers again, converts the effective annual return to a monthly rate, and totals any events assigned to the same end-year. It initializes `openingBalance` from the starting balance and `regularWithdrawals` from twelve monthly payments, then loops through Years 0–50. Year 0 covers the first twelve months; an event entered for end-year 1 belongs to that row.
+`calculateProjection` validates those numbers again, converts the effective annual return to a monthly rate, and totals any events assigned to the same end-year. It initializes `openingBalance` from the starting balance and `regularWithdrawals` from twelve monthly payments, then loops through Years 0–50. Year 0 covers the first twelve months; its year-end events have an engine end-year of 1.
 
 `let` means a variable can be assigned another value. `openingBalance` and `regularWithdrawals` use `let` because their values change from year to year. `const` means the variable will not be reassigned. Each year's `closingBalance` uses `const` because that result stays fixed for that iteration.
 
@@ -32,14 +32,14 @@ Read each iteration in this order:
 3. **Regular withdrawals:** Year 0 uses the initialized annual amount. The condition `year > 0` calls `calculateRegularWithdrawals` only for later years.
 4. **Lump-sum withdrawals and windfalls:** read the totals for this row's end-year.
 5. **Closing balance:** call `calculateClosingBalance` to apply monthly growth and month-end payments, then year-end events.
-6. **Chart value:** call `calculateTodaysValue` again, this time with the closing balance and `endYear` because one more year has elapsed.
+6. **Closing purchasing power:** call `calculateTodaysValue` again, this time with the closing balance and `endYear` because one more year has elapsed.
 7. **Save the row:** reject numeric overflow, then append the complete row to `rows`.
 8. **Check depletion:** record the first non-positive closing balance.
 9. **Prepare the next opening:** assign the closing balance to `openingBalance`, using zero if the closing balance is negative. Keep the current regular withdrawal total so the next iteration can adjust it.
 
 `rows.push(row)` appends a new result object to the array. The numbers saved in that object stay attached to that year even when `openingBalance` and `regularWithdrawals` change during the next iteration.
 
-The returned `rows` feed the summary, `ProjectionTable`, and `BalanceChart`. The table displays the opening amount and its today's-dollar value, withdrawals, events, and closing amount. Pagination changes which rows are displayed, not which rows are calculated. The chart plots annual closing amounts, uses `closingTodayValue` for its today's-dollar series, and adds the client's starting balance as its first point.
+The returned `rows` feed the summary, `ProjectionTable`, and `BalanceChart`. The table displays the opening amount and its today's-dollar value, withdrawals, events, and closing amount. Pagination changes which rows are displayed, not which rows are calculated. The chart plots paired columns from `openingBalance` and `openingTodayValue` for the same Years 0–50. It uses the rows directly, without an extra point. `closingTodayValue` remains available to the year-10 summary and chart tooltips. The chart also receives `depletionEndYear` from the same projection, rather than calculating a separate depletion result. The marker sits at the end of that projection year's band, while the columns still represent the opening amounts.
 
 ## Understand each calculation separately
 

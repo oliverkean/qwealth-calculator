@@ -2,15 +2,15 @@
 
 import {
   CartesianGrid,
-  Line,
-  LineChart,
+  Bar,
+  BarChart,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
-import type { ProjectionRow } from "@/lib/calculator";
+import type { Projection, ProjectionRow } from "@/lib/calculator";
 
 const money = new Intl.NumberFormat("en-AU", {
   style: "currency",
@@ -23,48 +23,119 @@ const compactMoney = new Intl.NumberFormat("en-AU", {
   maximumFractionDigits: 1,
 });
 
-type Props = {
-  rows: ProjectionRow[];
-  startingBalance: number;
-};
+/** Show the selected year's cash flow without confusing opening and closing values. */
+function YearBalanceTooltip({ row }: { row: ProjectionRow }) {
+  const amounts: [string, number][] = [
+    ["Opening balance", row.openingBalance],
+    ["In today's dollars", row.openingTodayValue],
+    ["Regular withdrawals", row.regularWithdrawals],
+  ];
+  if (row.lumpSumWithdrawals > 0)
+    amounts.push(["Lump-sum withdrawals", row.lumpSumWithdrawals]);
+  if (row.lumpSumWindfalls > 0)
+    amounts.push(["Windfalls", row.lumpSumWindfalls]);
+  amounts.push(
+    ["Closing balance", row.closingBalance],
+    ["Closing in today's dollars", row.closingTodayValue],
+  );
+
+  return (
+    <div className="w-52 max-w-[calc(100vw-3rem)] rounded-xl border border-line bg-white p-3 text-xs shadow-lg sm:w-64">
+      <p className="mb-3 text-sm font-semibold">Projection Year {row.year}</p>
+      <dl className="space-y-2">
+        {amounts.map(([label, value]) => (
+          <div
+            key={label}
+            className={`grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 ${label.startsWith("Closing") ? "border-t border-line pt-2 font-semibold" : ""}`}
+          >
+            <dt className="text-muted">{label}</dt>
+            <dd
+              aria-label={`Chart ${label}`}
+              className={`text-right tabular-nums [overflow-wrap:anywhere] ${value < 0 ? "text-[#a92f19]" : "text-ink"}`}
+            >
+              {money.format(value)}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
 
 /**
- * Plot the engine's nominal and today's-dollar closing balances from the dashboard.
- * Prepend the starting amount at time zero, before the first year's growth or withdrawals.
+ * Compare each year's opening balance with its purchasing power in today's dollars.
+ * Use the table's rows directly so year labels and amounts stay aligned.
  */
-export default function BalanceChart({ rows, startingBalance }: Props) {
-  const data = [
-    { endYear: 0, nominal: startingBalance, real: startingBalance },
-    ...rows.map((row) => ({
-      endYear: row.endYear,
-      nominal: row.closingBalance,
-      real: row.closingTodayValue,
-    })),
-  ];
+export default function BalanceChart({ rows, depletionEndYear }: Projection) {
+  const shortfallRow =
+    depletionEndYear === null ? undefined : rows[depletionEndYear - 1];
+  const finalRow = rows.at(-1);
+  if (!finalRow) return null;
+  const durationMessage = shortfallRow
+    ? `First shortfall: end of Year ${shortfallRow.year}`
+    : `Money stays positive through all ${rows.length} projected years`;
+  const hasLaterPositiveBalance =
+    shortfallRow &&
+    rows.some((row) => row.year > shortfallRow.year && row.closingBalance > 0);
 
   return (
     <div
       className="w-full"
       role="img"
-      aria-label="Line chart of nominal and inflation-adjusted year-end balances; exact values are in the annual projection table below."
+      aria-label={`Column chart of opening balances and their value in today's dollars for Years 0–50. ${durationMessage}. Exact values are in the annual projection table below.`}
     >
+      <div
+        aria-label="Chart duration summary"
+        className={`mb-4 rounded-xl border p-4 text-sm [overflow-wrap:anywhere] ${shortfallRow ? "border-[#ead3c7] bg-[#fff7f0]" : "border-[#d6e3da] bg-[#f1f7f3]"}`}
+      >
+        <p className="font-semibold">{durationMessage}</p>
+        {shortfallRow ? (
+          <>
+            <p className="mt-1 leading-6 text-muted">
+              {shortfallRow.year === 0
+                ? "No full year ends with money remaining."
+                : `${shortfallRow.year} full ${shortfallRow.year === 1 ? "year ends" : "years end"} with money remaining.`}
+            </p>
+            <p className="mt-1 text-xs leading-5 text-muted">
+              Annual estimate, not an exact depletion month.
+            </p>
+            {hasLaterPositiveBalance && (
+              <p className="mt-1 text-xs leading-5 text-muted">
+                Later positive balances do not remove this first shortfall.
+              </p>
+            )}
+          </>
+        ) : (
+          <p className="mt-1 leading-6 text-muted">
+            End of Year {finalRow.year}: {money.format(finalRow.closingBalance)}{" "}
+            ({money.format(finalRow.closingTodayValue)} in today&apos;s
+            dollars). No projection beyond this horizon.
+          </p>
+        )}
+      </div>
       <div className="mb-4 flex flex-wrap gap-x-5 gap-y-2 text-xs leading-5">
         <span className="inline-flex items-center gap-2">
-          <span className="h-0.5 w-6 bg-[#df5c2a]" aria-hidden="true" />
-          Nominal balance
+          <span
+            className="h-3 w-3 rounded-sm bg-[#df5c2a]"
+            aria-hidden="true"
+          />
+          Opening balance
         </span>
         <span className="inline-flex items-center gap-2">
           <span
-            className="w-6 border-t-2 border-dashed border-[#33483f]"
+            className="h-3 w-3 rounded-sm bg-[#33483f]"
             aria-hidden="true"
           />
-          Inflation-adjusted balance
+          In today&apos;s dollars
         </span>
       </div>
       <div className="h-[320px] w-full sm:h-[390px]">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart
-            data={data}
+          <BarChart
+            data={rows}
+            barGap={1}
+            barCategoryGap="15%"
+            accessibilityLayer
             margin={{ top: 12, right: 14, bottom: 4, left: 2 }}
           >
             <CartesianGrid
@@ -73,7 +144,7 @@ export default function BalanceChart({ rows, startingBalance }: Props) {
               vertical={false}
             />
             <XAxis
-              dataKey="endYear"
+              dataKey="year"
               ticks={[0, 10, 20, 30, 40, 50]}
               tickLine={false}
               axisLine={false}
@@ -88,40 +159,47 @@ export default function BalanceChart({ rows, startingBalance }: Props) {
               tickFormatter={(value: number) => compactMoney.format(value)}
             />
             <Tooltip
-              formatter={(value, name) => [
-                money.format(Number(value)),
-                name === "nominal" ? "Nominal balance" : "Today's dollars",
-              ]}
-              labelFormatter={(label) =>
-                Number(label) === 0
-                  ? "Starting balance"
-                  : `End of year ${label}`
-              }
-              contentStyle={{
-                border: "1px solid #e7e5e1",
-                borderRadius: 12,
-                boxShadow: "0 12px 32px rgb(0 0 0 / 0.08)",
+              isAnimationActive={false}
+              content={({ active, label }) => {
+                const row = rows.find((row) => row.year === Number(label));
+                return active && row ? <YearBalanceTooltip row={row} /> : null;
               }}
             />
             <ReferenceLine y={0} stroke="#a8a49e" />
-            <Line
-              type="linear"
-              dataKey="nominal"
-              stroke="#df5c2a"
-              strokeWidth={3}
-              dot={false}
+            {shortfallRow && (
+              <ReferenceLine
+                x={shortfallRow.year}
+                position="end"
+                stroke="#a92f19"
+                strokeWidth={2}
+                strokeDasharray="4 4"
+                className="first-shortfall-marker"
+                label={{
+                  value: `Year ${shortfallRow.year} end`,
+                  position:
+                    shortfallRow.year > 25 ? "insideTopRight" : "insideTopLeft",
+                  fill: "#a92f19",
+                  fontSize: 12,
+                }}
+              />
+            )}
+            <Bar
+              dataKey="openingBalance"
+              name="Opening balance"
+              className="opening-balance-series"
+              fill="#df5c2a"
+              maxBarSize={12}
               isAnimationActive={false}
             />
-            <Line
-              type="linear"
-              dataKey="real"
-              stroke="#33483f"
-              strokeWidth={2.5}
-              strokeDasharray="6 4"
-              dot={false}
+            <Bar
+              dataKey="openingTodayValue"
+              name="In today's dollars"
+              className="today-value-series"
+              fill="#33483f"
+              maxBarSize={12}
               isAnimationActive={false}
             />
-          </LineChart>
+          </BarChart>
         </ResponsiveContainer>
       </div>
     </div>
