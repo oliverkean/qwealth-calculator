@@ -10,6 +10,7 @@ const money = new Intl.NumberFormat("en-AU", {
   maximumFractionDigits: 2,
 });
 
+/** Share field keys and labels between the desktop table and mobile year cards. */
 const columns = [
   { key: "openingBalance", label: "Opening balance" },
   { key: "openingTodayValue", label: "Opening balance in today's dollars" },
@@ -19,6 +20,10 @@ const columns = [
   { key: "closingBalance", label: "Closing balance" },
 ] as const;
 
+/**
+ * Display the dashboard's calculated rows. Pagination selects the visible years;
+ * the complete projection remains available to the summary and chart.
+ */
 export function ProjectionTable({ rows }: { rows: ProjectionRow[] }) {
   const [pageSize, setPageSize] = useState(10);
   const [pageIndex, setPageIndex] = useState(0);

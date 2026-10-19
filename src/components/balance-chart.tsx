@@ -28,6 +28,10 @@ type Props = {
   startingBalance: number;
 };
 
+/**
+ * Plot the engine's nominal and today's-dollar closing balances from the dashboard.
+ * Prepend the starting amount at time zero, before the first year's growth or withdrawals.
+ */
 export default function BalanceChart({ rows, startingBalance }: Props) {
   const data = [
     { endYear: 0, nominal: startingBalance, real: startingBalance },

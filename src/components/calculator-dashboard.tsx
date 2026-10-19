@@ -11,6 +11,7 @@ import {
   type EventType,
 } from "@/lib/calculator";
 
+/** Render the responsive chart in the browser, where its container can be measured. */
 const BalanceChart = dynamic(() => import("@/components/balance-chart"), {
   ssr: false,
   loading: () => (
@@ -33,6 +34,7 @@ type FormEvent = {
   type: EventType;
   amount: string;
 };
+/** Keep editable values as strings so a cleared field remains distinct from zero. */
 type FormState = {
   startingBalance: string;
   annualReturn: string;
@@ -67,9 +69,11 @@ function createExampleForm(): FormState {
   };
 }
 
+/** Treat a blank input as invalid instead of letting Number("") turn it into zero. */
 const readNumber = (value: string) =>
   value.trim() === "" ? Number.NaN : Number(value);
 
+/** Convert form strings into engine inputs; a displayed 7.5% becomes 0.075. */
 function parseForm(form: FormState): CalculatorInputs {
   return {
     startingBalance: readNumber(form.startingBalance),
@@ -84,6 +88,10 @@ function parseForm(form: FormState): CalculatorInputs {
   };
 }
 
+/**
+ * Return form validation messages keyed by control ID, including stable event IDs.
+ * The calculation engine validates its numeric inputs independently.
+ */
 function getFieldErrors(form: FormState): Record<string, string> {
   const errors: Record<string, string> = {};
   for (const field of ["startingBalance", "monthlyWithdrawal"] as const) {
@@ -208,6 +216,11 @@ function NumberField({
   );
 }
 
+/**
+ * Own the editable scenario in browser state and calculate it locally on input changes.
+ * Valid inputs produce one projection shared by the summary, table, and chart.
+ * Invalid edits clear the results; calculation failures appear in the results area.
+ */
 export default function CalculatorDashboard() {
   const [form, setForm] = useState<FormState>(createEmptyForm);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -232,6 +245,7 @@ export default function CalculatorDashboard() {
     }
   }, [fieldErrors, inputs]);
 
+  /** Block invalid projections immediately, but show field errors after blur. */
   const markTouched = (key: string) =>
     setTouched((current) => ({ ...current, [key]: true }));
   const errorFor = (key: string) =>
@@ -547,6 +561,7 @@ export default function CalculatorDashboard() {
               </div>
             ) : (
               <>
+                {/* A one-based depletion end-year becomes a zero-based shortfall label and a count of prior positive years. */}
                 <div
                   className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4"
                   role="group"
@@ -598,6 +613,7 @@ export default function CalculatorDashboard() {
                       Your opening amount
                     </p>
                   </div>
+                  {/* Row index 9 closes the tenth year because the first row is Year 0. */}
                   <div className="rounded-2xl border border-line bg-white p-6">
                     <p className="eyebrow">End of year 10</p>
                     <output

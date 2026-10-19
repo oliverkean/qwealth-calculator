@@ -1,17 +1,18 @@
-/** Project 51 twelve-month periods, labelled Year 0 through Year 50. */
+// Project 51 twelve-month periods, labelled Year 0 through Year 50.
 export const PROJECTION_YEARS = 51;
 const MONTHS_PER_YEAR = 12;
 
 export type EventType = "withdrawal" | "windfall";
 
+/** Events occur at year-end; endYear 1 ends the first twelve months. */
 export type LumpSumEvent = {
   id: string;
-  /** 1 means the end of the first twelve months. */
   endYear: number;
   type: EventType;
   amount: number;
 };
 
+/** Annual rates use decimals: 0.075 means 7.5%. */
 export type CalculatorInputs = {
   startingBalance: number;
   annualReturn: number;
@@ -20,8 +21,11 @@ export type CalculatorInputs = {
   events: LumpSumEvent[];
 };
 
+/**
+ * Year 0 covers the first twelve months and ends at endYear 1.
+ * Today values express opening and closing balances in today's purchasing power.
+ */
 export type ProjectionRow = {
-  /** Zero-based year: 0 covers the first twelve months. */
   year: number;
   endYear: number;
   openingBalance: number;
@@ -30,17 +34,16 @@ export type ProjectionRow = {
   lumpSumWithdrawals: number;
   lumpSumWindfalls: number;
   closingBalance: number;
-  /** Year-end balance expressed in today's purchasing power. */
   closingTodayValue: number;
 };
 
+/** depletionEndYear is the first non-positive close; null means none within 51 years. */
 export type Projection = {
   rows: ProjectionRow[];
-  /** First end-year with a non-positive closing balance, or null. */
   depletionEndYear: number | null;
 };
 
-/** Optional values for the Load example action. */
+// Optional sample values for the Load example action.
 export const defaultInputs: CalculatorInputs = {
   startingBalance: 1_650_000,
   annualReturn: 0.075,
@@ -96,6 +99,11 @@ export function validateInputs(inputs: CalculatorInputs): string[] {
   return errors;
 }
 
+/**
+ * Project 51 years of balances using monthly growth and withdrawals.
+ * Year 0 uses the initial annual withdrawal; later rows adjust the previous amount.
+ * Save each closing balance before resetting a negative balance for the next row.
+ */
 export function calculateProjection(inputs: CalculatorInputs): Projection {
   const errors = validateInputs(inputs);
   if (errors.length > 0) {
@@ -103,53 +111,52 @@ export function calculateProjection(inputs: CalculatorInputs): Projection {
   }
 
   const monthlyRate = (1 + inputs.annualReturn) ** (1 / MONTHS_PER_YEAR) - 1;
-  const inflationFactor = 1 + inputs.annualInflation;
   const eventsByYear = groupEventsByYear(inputs.events);
   const rows: ProjectionRow[] = [];
+  let openingBalance = inputs.startingBalance;
+  let regularWithdrawals = inputs.monthlyWithdrawal * MONTHS_PER_YEAR;
   let depletionEndYear: number | null = null;
 
   for (let year = 0; year < PROJECTION_YEARS; year += 1) {
     const endYear = year + 1;
-    const previousRow = rows[year - 1];
-    let openingBalance = inputs.startingBalance;
-    let regularWithdrawals = inputs.monthlyWithdrawal * MONTHS_PER_YEAR;
+    const openingTodayValue = calculateTodaysValue(
+      openingBalance,
+      inputs.annualInflation,
+      year,
+    );
 
-    if (previousRow) {
-      openingBalance = previousRow.closingBalance;
-      if (openingBalance < 0) {
-        openingBalance = 0;
-      }
-
-      if (openingBalance > 0) {
-        regularWithdrawals = previousRow.regularWithdrawals * inflationFactor;
-      } else {
-        regularWithdrawals = openingBalance;
-      }
+    if (year > 0) {
+      regularWithdrawals = calculateRegularWithdrawals(
+        openingBalance,
+        regularWithdrawals,
+        inputs.annualInflation,
+      );
     }
 
-    const monthlyWithdrawal = regularWithdrawals / MONTHS_PER_YEAR;
-    const balanceAfterRegularWithdrawals = applyGrowthAndMonthlyWithdrawals(
-      openingBalance,
-      monthlyWithdrawal,
-      monthlyRate,
-    );
     const { lumpSumWithdrawals, lumpSumWindfalls } = eventsByYear[year];
+    const closingBalance = calculateClosingBalance(
+      openingBalance,
+      regularWithdrawals,
+      monthlyRate,
+      lumpSumWithdrawals,
+      lumpSumWindfalls,
+    );
+    const closingTodayValue = calculateTodaysValue(
+      closingBalance,
+      inputs.annualInflation,
+      endYear,
+    );
 
-    // One-off events happen after all twelve monthly periods.
-    const closingBalance =
-      balanceAfterRegularWithdrawals - lumpSumWithdrawals + lumpSumWindfalls;
     const row: ProjectionRow = {
       year,
       endYear,
       openingBalance,
-      openingTodayValue:
-        openingBalance / wholePeriodPower(inflationFactor, year),
+      openingTodayValue,
       regularWithdrawals,
       lumpSumWithdrawals,
       lumpSumWindfalls,
       closingBalance,
-      closingTodayValue:
-        closingBalance / wholePeriodPower(inflationFactor, endYear),
+      closingTodayValue,
     };
 
     const hasNonFiniteValue = Object.values(row).some(
@@ -162,14 +169,76 @@ export function calculateProjection(inputs: CalculatorInputs): Projection {
     }
 
     rows.push(row);
+
     if (depletionEndYear === null && closingBalance <= 0) {
       depletionEndYear = endYear;
     }
+
+    openingBalance = closingBalance < 0 ? 0 : closingBalance;
   }
 
   return { rows, depletionEndYear };
 }
 
+/** Discount a balance by inflation for the number of elapsed years. */
+function calculateTodaysValue(
+  balance: number,
+  annualInflation: number,
+  elapsedYears: number,
+): number {
+  return balance / wholePeriodPower(1 + annualInflation, elapsedYears);
+}
+
+/**
+ * Adjust the previous annual withdrawal for inflation when the opening is positive.
+ * After withdrawals become zero, a later windfall does not restart them.
+ */
+function calculateRegularWithdrawals(
+  openingBalance: number,
+  previousRegularWithdrawals: number,
+  annualInflation: number,
+): number {
+  if (openingBalance > 0) {
+    return previousRegularWithdrawals * (1 + annualInflation);
+  }
+
+  return openingBalance;
+}
+
+/**
+ * Compound the opening balance and account for twelve month-end withdrawals.
+ * Subtract lump-sum withdrawals and add windfalls at year-end.
+ * With zero return, subtract the payments without dividing by the monthly rate.
+ */
+function calculateClosingBalance(
+  openingBalance: number,
+  regularWithdrawals: number,
+  monthlyRate: number,
+  lumpSumWithdrawals: number,
+  lumpSumWindfalls: number,
+): number {
+  const monthlyWithdrawal = regularWithdrawals / MONTHS_PER_YEAR;
+  let balanceAfterMonthlyWithdrawals: number;
+
+  if (monthlyRate === 0) {
+    balanceAfterMonthlyWithdrawals =
+      openingBalance - monthlyWithdrawal * MONTHS_PER_YEAR;
+  } else {
+    const annualGrowthFactor = wholePeriodPower(
+      1 + monthlyRate,
+      MONTHS_PER_YEAR,
+    );
+    const balanceWithGrowth = openingBalance * annualGrowthFactor;
+    const withdrawalGrowthFactor = (annualGrowthFactor - 1) / monthlyRate;
+    const withdrawalsAtYearEnd = monthlyWithdrawal * withdrawalGrowthFactor;
+
+    balanceAfterMonthlyWithdrawals = balanceWithGrowth - withdrawalsAtYearEnd;
+  }
+
+  return balanceAfterMonthlyWithdrawals - lumpSumWithdrawals + lumpSumWindfalls;
+}
+
+/** Total withdrawals and windfalls separately for each event's end-year. */
 function groupEventsByYear(events: LumpSumEvent[]) {
   const totals = Array.from({ length: PROJECTION_YEARS }, () => ({
     lumpSumWithdrawals: 0,
@@ -188,25 +257,7 @@ function groupEventsByYear(events: LumpSumEvent[]) {
   return totals;
 }
 
-/** Apply growth followed by a withdrawal at the end of each month. */
-function applyGrowthAndMonthlyWithdrawals(
-  openingBalance: number,
-  monthlyWithdrawal: number,
-  monthlyRate: number,
-): number {
-  if (monthlyRate === 0) {
-    return openingBalance - monthlyWithdrawal * MONTHS_PER_YEAR;
-  }
-
-  const annualGrowthFactor = wholePeriodPower(1 + monthlyRate, MONTHS_PER_YEAR);
-  const balanceWithGrowth = openingBalance * annualGrowthFactor;
-  const withdrawalGrowthFactor = (annualGrowthFactor - 1) / monthlyRate;
-  const withdrawalsAtYearEnd = monthlyWithdrawal * withdrawalGrowthFactor;
-
-  return balanceWithGrowth - withdrawalsAtYearEnd;
-}
-
-/** Keep the multiplication order stable to preserve cent rounding over whole periods. */
+/** Use a fixed multiplication order to preserve cents near rounding boundaries. */
 function wholePeriodPower(base: number, exponent: number): number {
   let result = 1;
   let factor = base;
