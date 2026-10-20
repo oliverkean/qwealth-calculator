@@ -211,6 +211,11 @@ describe("calculator page", () => {
 
   it("loads the optional example and explains year indexing", () => {
     renderExample();
+    expect(screen.getByText("After 10 years")).toBeInTheDocument();
+    expect(screen.getByText("End of projection Year 9")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Nominal balance after 10 years"),
+    ).toHaveTextContent("$1,428,528.34");
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
       "How long will your money last?",
     );
@@ -391,7 +396,7 @@ describe("calculator page", () => {
         screen.getByLabelText("Starting balance result"),
       ).toHaveTextContent(money.format(fixture.inputs.startingBalance));
       expect(
-        screen.getByLabelText("Year 10 nominal balance"),
+        screen.getByLabelText("Nominal balance after 10 years"),
       ).toHaveTextContent(money.format(fixture.rows[9][5]));
       expect(screen.getByLabelText("First shortfall year")).toHaveTextContent(
         fixture.depletionEndYear === null
@@ -445,15 +450,15 @@ describe("calculator page", () => {
     expectAnnualRow(1, fixture.rows[1]);
     expectAnnualRow(29, fixture.rows[29]);
     expectAnnualRow(31, fixture.rows[31]);
-    expect(screen.getByLabelText("Year 10 nominal balance")).toHaveTextContent(
-      money.format(fixture.rows[9][5]),
-    );
+    expect(
+      screen.getByLabelText("Nominal balance after 10 years"),
+    ).toHaveTextContent(money.format(fixture.rows[9][5]));
     const beforeRemoval = screen.getByLabelText(
-      "Year 10 nominal balance",
+      "Nominal balance after 10 years",
     ).textContent;
     await user.click(screen.getAllByRole("button", { name: "Remove" })[0]);
     expect(
-      screen.getByLabelText("Year 10 nominal balance").textContent,
+      screen.getByLabelText("Nominal balance after 10 years").textContent,
     ).not.toBe(beforeRemoval);
   });
 

@@ -2,7 +2,7 @@
 
 ```mermaid
 flowchart TD
-    A[Open calculator with empty fields] --> B[Enter client balance, return, inflation, monthly withdrawal, and one-off events]
+    A[Open calculator with default rates and blank balance and withdrawal] --> B[Enter client balance, return, inflation, monthly withdrawal, and one-off events]
     A -- Optional: Load example --> L[Fill editable reference values]
     L --> B
     B --> C{All inputs valid?}
@@ -17,7 +17,8 @@ flowchart TD
     J -- Yes --> F
     J -- No --> K[Update duration, shortfall, balances, chart, and annual results]
     K -- Change any input --> B
-    K -- Clear --> A
+    K -- Clear --> M[Remove all values and events]
+    M --> B
 ```
 
 The same calculated rows feed the summary, the chart, the desktop table, and the expandable year cards. The chart compares each year's opening balance with its opening value in today's dollars using paired columns for Years 0–50. It receives the engine's existing depletion result to mark the end of the first non-positive year; it does not recalculate depletion. Its duration summary distinguishes first shortfall from survival through the finite horizon, including later recovery. Tooltips show the selected row's opening amounts, regular withdrawals, any nonzero events, and closing amounts. A year-end event changes the following year's opening columns, not the opening of the year in which it occurs. The calculator starts with an editable 7.5% average annual return and 3% average annual inflation. Starting balance and monthly withdrawal remain blank until entered. Load example fills the full reference scenario; Clear removes all values and events. A change to any input creates a new projection; there are no fixed result values.

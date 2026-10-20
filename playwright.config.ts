@@ -5,7 +5,7 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: 0,
-  workers: 2,
+  workers: 1,
   timeout: 60_000,
   expect: { timeout: 10_000 },
   reporter: [["list"], ["html", { open: "never" }]],
@@ -17,6 +17,22 @@ export default defineConfig({
   },
   projects: [
     {
+      name: "phone-320",
+      use: {
+        viewport: { width: 320, height: 812 },
+        isMobile: true,
+        hasTouch: true,
+      },
+    },
+    {
+      name: "phone-336",
+      use: {
+        viewport: { width: 336, height: 812 },
+        isMobile: true,
+        hasTouch: true,
+      },
+    },
+    {
       name: "phone-375",
       use: {
         viewport: { width: 375, height: 812 },
@@ -25,9 +41,14 @@ export default defineConfig({
       },
     },
     {
+      name: "tablet-640",
+      use: { viewport: { width: 640, height: 1024 }, hasTouch: true },
+    },
+    {
       name: "tablet-768",
       use: { viewport: { width: 768, height: 1024 }, hasTouch: true },
     },
+    { name: "laptop-1024", use: { viewport: { width: 1024, height: 900 } } },
     { name: "laptop-1280", use: { viewport: { width: 1280, height: 900 } } },
     { name: "desktop-1440", use: { viewport: { width: 1440, height: 1000 } } },
     { name: "wide-1920", use: { viewport: { width: 1920, height: 1080 } } },

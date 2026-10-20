@@ -39,7 +39,7 @@ Read each iteration in this order:
 
 `rows.push(row)` appends a new result object to the array. The numbers saved in that object stay attached to that year even when `openingBalance` and `regularWithdrawals` change during the next iteration.
 
-The returned `rows` feed the summary, `ProjectionTable`, and `BalanceChart`. The table displays the opening amount and its today's-dollar value, withdrawals, events, and closing amount. Pagination changes which rows are displayed, not which rows are calculated. The chart plots paired columns from `openingBalance` and `openingTodayValue` for the same Years 0–50. It uses the rows directly, without an extra point. `closingTodayValue` remains available to the year-10 summary and chart tooltips. The chart also receives `depletionEndYear` from the same projection, rather than calculating a separate depletion result. The marker sits at the end of that projection year's band, while the columns still represent the opening amounts.
+The returned `rows` feed the summary, `ProjectionTable`, and `BalanceChart`. The table displays the opening amount and its today's-dollar value, withdrawals, events, and closing amount. Pagination changes which rows are displayed, not which rows are calculated. The chart plots paired columns from `openingBalance` and `openingTodayValue` for the same Years 0–50. It uses the rows directly, without an extra point. `closingTodayValue` remains available to the summary after ten elapsed years and chart tooltips. The chart also receives `depletionEndYear` from the same projection, rather than calculating a separate depletion result. The marker sits at the end of that projection year's band, while the columns still represent the opening amounts.
 
 ## Understand each calculation separately
 

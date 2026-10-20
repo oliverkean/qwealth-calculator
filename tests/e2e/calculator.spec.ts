@@ -133,15 +133,23 @@ test("chart columns and tooltips follow the table's opening balances and project
   const hoverYear = async (year: number) => {
     const surface = chart.locator("svg.recharts-surface");
     await surface.scrollIntoViewIfNeeded();
-    const column = (await series
+    const nominal = (await series
       .first()
       .locator(".recharts-bar-rectangle")
       .nth(year)
       .boundingBox())!;
+    const todaysValue = (await series
+      .nth(1)
+      .locator(".recharts-bar-rectangle")
+      .nth(year)
+      .boundingBox())!;
     const plot = (await surface.boundingBox())!;
-    // Axis tooltips use the whole year band, not the thin column's hit target.
+    // Centre the pair's year band so pixel rounding cannot select its neighbour.
     await surface.hover({
-      position: { x: column.x + column.width / 2 - plot.x, y: plot.height / 2 },
+      position: {
+        x: (nominal.x + todaysValue.x + todaysValue.width) / 2 - plot.x,
+        y: plot.height / 2,
+      },
     });
   };
   for (const year of [0, 1, 2]) {
@@ -282,6 +290,45 @@ test("chart explains first shortfall, exact zero, later funds, and the finite ho
 test("fresh client values produce all annual rows and a real chart without overflow", async ({
   page,
 }, testInfo) => {
+  const originalViewport = page.viewportSize()!;
+  const inputWidths =
+    originalViewport.width === 375 ? [320, 336, 375] : [originalViewport.width];
+  for (const width of inputWidths) {
+    await page.setViewportSize({ ...originalViewport, width });
+    const fields = await page.locator("aside input").evaluateAll((elements) =>
+      elements.map((input) => {
+        const control = input.parentElement!.getBoundingClientRect();
+        const card = input.closest("aside")!;
+        const cardBox = card.getBoundingClientRect();
+        const style = getComputedStyle(card);
+        return {
+          id: input.id,
+          left: control.left,
+          right: control.right,
+          contentLeft:
+            cardBox.left +
+            Number.parseFloat(style.borderLeftWidth) +
+            Number.parseFloat(style.paddingLeft),
+          contentRight:
+            cardBox.right -
+            Number.parseFloat(style.borderRightWidth) -
+            Number.parseFloat(style.paddingRight),
+        };
+      }),
+    );
+    expect(fields).toHaveLength(4);
+    for (const field of fields) {
+      expect(
+        field.left,
+        `${field.id} left edge at ${width}px`,
+      ).toBeGreaterThanOrEqual(field.contentLeft - 1);
+      expect(
+        field.right,
+        `${field.id} right edge at ${width}px`,
+      ).toBeLessThanOrEqual(field.contentRight + 1);
+    }
+  }
+  await page.setViewportSize(originalViewport);
   await expect(
     page.getByRole("heading", { name: "Start your projection" }),
   ).toBeVisible();
@@ -336,11 +383,15 @@ test("fresh client values produce all annual rows and a real chart without overf
   await expect(
     page.getByLabel("Starting balance result", { exact: true }),
   ).toHaveText("$1,000,000.00");
-  await expect(page.getByLabel("Year 10 nominal balance")).toHaveText(
+  await expect(page.getByLabel("Nominal balance after 10 years")).toHaveText(
     "$203,039.28",
   );
+  await expect(page.getByText("After 10 years", { exact: true })).toBeVisible();
   await expect(
-    page.getByLabel("Year 10 balance in today's dollars"),
+    page.getByText("End of projection Year 9", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByLabel("Balance after 10 years in today's dollars"),
   ).toHaveText(
     money.format(
       fixture.rows[9][5] / (1 + fixture.inputs.annualInflation) ** 10,
@@ -440,7 +491,7 @@ test("each main input updates displayed amounts and the actual chart columns", a
     await page.getByRole("textbox", { name, exact: true }).fill(value);
     const fixture = fixtures.find((item) => item.name === scenario)!;
     await expectRows(page, fixture.rows);
-    await expect(page.getByLabel("Year 10 nominal balance")).toHaveText(
+    await expect(page.getByLabel("Nominal balance after 10 years")).toHaveText(
       money.format(fixture.rows[9][5]),
     );
     await expect

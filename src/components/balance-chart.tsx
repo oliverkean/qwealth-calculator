@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   CartesianGrid,
   Bar,
@@ -67,6 +68,8 @@ function YearBalanceTooltip({ row }: { row: ProjectionRow }) {
  * Use the table's rows directly so year labels and amounts stay aligned.
  */
 export default function BalanceChart({ rows, depletionEndYear }: Projection) {
+  // Narrow plots cannot fit the cash-flow tooltip beside the active column.
+  const [isNarrowChart, setIsNarrowChart] = useState(false);
   const shortfallRow =
     depletionEndYear === null ? undefined : rows[depletionEndYear - 1];
   const finalRow = rows.at(-1);
@@ -130,7 +133,11 @@ export default function BalanceChart({ rows, depletionEndYear }: Projection) {
         </span>
       </div>
       <div className="h-[320px] w-full sm:h-[390px]">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer
+          width="100%"
+          height="100%"
+          onResize={(width) => setIsNarrowChart(width < 300)}
+        >
           <BarChart
             data={rows}
             barGap={1}
@@ -160,16 +167,19 @@ export default function BalanceChart({ rows, depletionEndYear }: Projection) {
             />
             <Tooltip
               isAnimationActive={false}
+              position={isNarrowChart ? { x: 0 } : undefined}
               content={({ active, label }) => {
                 const row = rows.find((row) => row.year === Number(label));
                 return active && row ? <YearBalanceTooltip row={row} /> : null;
               }}
             />
             <ReferenceLine y={0} stroke="#a8a49e" />
+            {/* Preserve the last year-end marker at fractional band boundaries. */}
             {shortfallRow && (
               <ReferenceLine
                 x={shortfallRow.year}
                 position="end"
+                ifOverflow="visible"
                 stroke="#a92f19"
                 strokeWidth={2}
                 strokeDasharray="4 4"

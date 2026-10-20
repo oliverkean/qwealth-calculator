@@ -10,14 +10,26 @@ const money = new Intl.NumberFormat("en-AU", {
   maximumFractionDigits: 2,
 });
 
-/** Share field keys and labels between the desktop table and mobile year cards. */
+/** Keep compact table headings alongside the full accessible and mobile labels. */
 const columns = [
-  { key: "openingBalance", label: "Opening balance" },
-  { key: "openingTodayValue", label: "Opening balance in today's dollars" },
-  { key: "regularWithdrawals", label: "Regular withdrawals" },
-  { key: "lumpSumWithdrawals", label: "Lump-sum withdrawals" },
-  { key: "lumpSumWindfalls", label: "Windfalls" },
-  { key: "closingBalance", label: "Closing balance" },
+  { key: "openingBalance", heading: "Opening", label: "Opening balance" },
+  {
+    key: "openingTodayValue",
+    heading: "Today's value",
+    label: "Opening balance in today's dollars",
+  },
+  {
+    key: "regularWithdrawals",
+    heading: "Withdrawals",
+    label: "Regular withdrawals",
+  },
+  {
+    key: "lumpSumWithdrawals",
+    heading: "Lump sums",
+    label: "Lump-sum withdrawals",
+  },
+  { key: "lumpSumWindfalls", heading: "Windfalls", label: "Windfalls" },
+  { key: "closingBalance", heading: "Closing", label: "Closing balance" },
 ] as const;
 
 /**
@@ -71,14 +83,19 @@ export function ProjectionTable({ rows }: { rows: ProjectionRow[] }) {
           <caption className="sr-only">
             Annual projection in AUD. Year 0 covers the first 12 months.
           </caption>
-          <thead className="bg-[#f5f3ef] text-[11px] font-bold uppercase tracking-[0.09em] text-muted">
+          <thead className="bg-[#f5f3ef] text-xs font-semibold text-muted">
             <tr>
-              <th scope="col" className="w-[8%] px-4 py-4 text-left">
+              <th scope="col" className="w-[8%] px-4 py-3 text-left">
                 Year
               </th>
               {columns.map((column) => (
-                <th key={column.key} scope="col" className="px-3 py-4">
-                  {column.label}
+                <th
+                  key={column.key}
+                  scope="col"
+                  aria-label={column.label}
+                  className="px-3 py-3"
+                >
+                  {column.heading}
                 </th>
               ))}
             </tr>
@@ -89,7 +106,10 @@ export function ProjectionTable({ rows }: { rows: ProjectionRow[] }) {
                 key={row.year}
                 className="border-t border-line text-ink even:bg-[#fcfbf9] hover:bg-[#fff6ef]"
               >
-                <th scope="row" className="px-4 py-3 text-left font-semibold">
+                <th
+                  scope="row"
+                  className="whitespace-nowrap px-4 py-3 text-left font-semibold"
+                >
                   Year {row.year}
                 </th>
                 {columns.map((column) => (
@@ -105,6 +125,10 @@ export function ProjectionTable({ rows }: { rows: ProjectionRow[] }) {
           </tbody>
         </table>
       </div>
+      <p className="mt-3 hidden text-xs leading-5 text-muted xl:block">
+        Today&apos;s value is the inflation-adjusted opening balance. Lump sums
+        are one-off withdrawals.
+      </p>
       <div
         className="grid min-w-0 gap-3 sm:grid-cols-2 xl:hidden"
         aria-label="Annual projection by year"

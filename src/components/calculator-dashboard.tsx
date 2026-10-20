@@ -164,7 +164,7 @@ function NumberField({
   onBlur,
 }: NumberFieldProps) {
   return (
-    <div>
+    <div className="min-w-0">
       <label htmlFor={id} className="mb-2 block text-sm font-semibold text-ink">
         {label}
       </label>
@@ -326,7 +326,7 @@ export default function CalculatorDashboard() {
             >
               Load example
             </button>
-            <div className="grid gap-5 pt-6 sm:grid-cols-2 lg:grid-cols-1">
+            <div className="grid grid-cols-1 gap-5 pt-6 sm:grid-cols-2 lg:grid-cols-1">
               <NumberField
                 id="startingBalance"
                 label="Starting balance"
@@ -541,9 +541,9 @@ export default function CalculatorDashboard() {
                   </div>
                   {/* Row index 9 closes the tenth year because the first row is Year 0. */}
                   <div className="rounded-2xl border border-line bg-white p-6">
-                    <p className="eyebrow">End of year 10</p>
+                    <p className="eyebrow">After 10 years</p>
                     <output
-                      aria-label="Year 10 nominal balance"
+                      aria-label="Nominal balance after 10 years"
                       className="mt-4 block text-[clamp(1.3rem,1.8vw,2rem)] font-semibold leading-tight tracking-[-0.045em] tabular-nums [overflow-wrap:anywhere]"
                     >
                       {currency.format(projection.rows[9].closingBalance)}
@@ -552,7 +552,10 @@ export default function CalculatorDashboard() {
                       Nominal closing balance
                     </p>
                     <p className="mt-1 text-xs leading-5 text-muted">
-                      <output aria-label="Year 10 balance in today's dollars">
+                      End of projection Year 9
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-muted">
+                      <output aria-label="Balance after 10 years in today's dollars">
                         {currency.format(projection.rows[9].closingTodayValue)}
                       </output>{" "}
                       in today&apos;s dollars
