@@ -251,7 +251,7 @@ test("chart retains shortfall markers, exact zero, later funds, and the finite h
   await expect(chart.getByText("Year 0 end", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "+ Add event", exact: true }).click();
   await page
-    .getByRole("textbox", { name: "Projection year", exact: true })
+    .getByRole("textbox", { name: "End of year (0–50)", exact: true })
     .fill("3");
   await page
     .getByRole("textbox", { name: "Amount (AUD)", exact: true })
@@ -388,9 +388,6 @@ test("fresh client values produce all annual rows and a real chart without overf
   );
   await expect(page.getByText("After 10 years", { exact: true })).toBeVisible();
   await expect(
-    page.getByText("End of projection Year 9", { exact: true }),
-  ).toBeVisible();
-  await expect(
     page.getByLabel("Balance after 10 years in today's dollars"),
   ).toHaveText(
     money.format(
@@ -443,6 +440,81 @@ test("fresh client values produce all annual rows and a real chart without overf
     path: chartPath,
     contentType: "image/png",
   });
+});
+
+test("200% text keeps sidebar actions and the year-range control contained and usable", async ({
+  page,
+}, testInfo) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.addStyleTag({ content: "html { font-size: 32px !important; }" });
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
+  await page.getByRole("button", { name: "Load example", exact: true }).click();
+  const sidebar = page.locator("aside");
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+    .toBe(page.viewportSize()!.width);
+  const controls = await sidebar.locator("button").evaluateAll((buttons) =>
+    buttons.map((button) => {
+      const card = button.closest("aside")!;
+      const cardBox = card.getBoundingClientRect();
+      const style = getComputedStyle(card);
+      const bounds = button.getBoundingClientRect();
+      return {
+        name: button.textContent,
+        left: bounds.left,
+        right: bounds.right,
+        height: bounds.height,
+        contentLeft:
+          cardBox.left +
+          Number.parseFloat(style.borderLeftWidth) +
+          Number.parseFloat(style.paddingLeft),
+        contentRight:
+          cardBox.right -
+          Number.parseFloat(style.borderRightWidth) -
+          Number.parseFloat(style.paddingRight),
+      };
+    }),
+  );
+  for (const control of controls) {
+    expect(control.left, `${control.name} left edge`).toBeGreaterThanOrEqual(
+      control.contentLeft - 1,
+    );
+    expect(control.right, `${control.name} right edge`).toBeLessThanOrEqual(
+      control.contentRight + 1,
+    );
+    expect(
+      control.height,
+      `${control.name} target height`,
+    ).toBeGreaterThanOrEqual(44);
+  }
+  const range = page.getByRole("combobox", { name: "Year range" });
+  const rangeBox = (await range.boundingBox())!;
+  const annualBox = (await page
+    .getByRole("region", { name: "Annual projection", exact: true })
+    .boundingBox())!;
+  expect(rangeBox.x).toBeGreaterThanOrEqual(annualBox.x);
+  expect(rangeBox.x + rangeBox.width).toBeLessThanOrEqual(
+    annualBox.x + annualBox.width + 1,
+  );
+  await range.selectOption("51");
+  await expect(range).toHaveValue("51");
+  const addEvent = page.getByRole("button", {
+    name: "+ Add event",
+    exact: true,
+  });
+  await addEvent.focus();
+  await addEvent.press("Enter");
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(addEvent).toBeFocused();
+  await sidebar.screenshot({
+    path: testInfo.outputPath("enlarged-sidebar.png"),
+  });
+  await page.getByRole("button", { name: "Clear", exact: true }).click();
+  for (const input of await page.getByRole("textbox").all()) {
+    await expect(input).toHaveValue("");
+  }
+  await expect(page.getByRole("img", { name: chartName })).toHaveCount(0);
 });
 
 test("Load example is optional and Clear removes all values, events, and results", async ({
@@ -529,7 +601,7 @@ test("event drafts save, cancel, aggregate, and update the selected annual row",
   const add = page.getByRole("button", { name: "+ Add event", exact: true });
   const save = page.getByRole("button", { name: "Save event", exact: true });
   const year = page.getByRole("textbox", {
-    name: "Projection year",
+    name: "End of year (0–50)",
     exact: true,
   });
   const amount = page.getByRole("textbox", {
@@ -664,7 +736,7 @@ test("event validation rejects invalid years and amounts and permits the last ye
   });
   await page.getByRole("button", { name: "+ Add event", exact: true }).click();
   const year = page.getByRole("textbox", {
-    name: "Projection year",
+    name: "End of year (0–50)",
     exact: true,
   });
   const amount = page.getByRole("textbox", {

@@ -287,16 +287,12 @@ export default function CalculatorDashboard() {
           <h1 className="text-[clamp(1.875rem,3.5vw,3rem)] font-semibold leading-tight tracking-[-0.045em]">
             How long will your money last?
           </h1>
-          <p className="mt-3 text-base leading-6 text-muted sm:text-lg">
-            Explore how withdrawals, investment returns, inflation, and one-off
-            events shape your balance over time.
-          </p>
         </div>
 
         <div className="grid items-start gap-6 lg:grid-cols-[340px_minmax(0,1fr)] xl:grid-cols-[370px_minmax(0,1fr)]">
           <aside className="min-w-0 rounded-2xl border border-line bg-white p-5 shadow-[0_8px_30px_rgb(28_28_26_/_0.025)] sm:p-6">
-            <div className="flex items-start justify-between gap-4 border-b border-line pb-5">
-              <div>
+            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-line pb-5">
+              <div className="max-w-full flex-auto [overflow-wrap:anywhere]">
                 <h2 className="text-xl font-semibold tracking-[-0.035em]">
                   Calculator inputs
                 </h2>
@@ -312,17 +308,13 @@ export default function CalculatorDashboard() {
                 Clear
               </button>
             </div>
-            <p className="mt-5 text-sm leading-6 text-muted">
-              Enter the values for the person using this calculator. Every
-              result is calculated from these inputs.
-            </p>
             <button
               type="button"
               onClick={() => {
                 setForm(createExampleForm());
                 setTouched({});
               }}
-              className="mt-3 min-h-11 rounded-lg border border-line px-4 text-sm font-semibold transition-colors hover:border-orange hover:text-orange focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange"
+              className="mt-3 min-h-11 max-w-full rounded-lg border border-line px-4 text-sm font-semibold transition-colors [overflow-wrap:anywhere] hover:border-orange hover:text-orange focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange"
             >
               Load example
             </button>
@@ -369,18 +361,11 @@ export default function CalculatorDashboard() {
             </div>
 
             <div className="mt-8 border-t border-line pt-6">
-              <div className="flex items-start justify-between gap-3">
-                <div>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex-1">
                   <h3 className="text-base font-semibold tracking-[-0.02em]">
                     One-off events
                   </h3>
-                  <p
-                    id="event-year-hint"
-                    className="mt-1 text-xs leading-5 text-muted"
-                  >
-                    Applied at the end of the selected projection year. Year 0
-                    covers the first 12 months.
-                  </p>
                 </div>
                 <button
                   type="button"
@@ -395,17 +380,12 @@ export default function CalculatorDashboard() {
                       isNew: true,
                     })
                   }
-                  className="min-h-11 shrink-0 rounded-lg border border-line px-3 text-xs font-bold transition-colors hover:border-orange hover:text-orange focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange"
+                  className="min-h-11 max-w-full shrink-0 rounded-lg border border-line px-3 text-xs font-bold transition-colors [overflow-wrap:anywhere] hover:border-orange hover:text-orange focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange"
                 >
                   + Add event
                 </button>
               </div>
-              {form.events.length === 0 ? (
-                <p className="mt-4 rounded-lg bg-[#f6f4f0] p-4 text-sm text-muted">
-                  No one-off events. Add a withdrawal or windfall to test a
-                  scenario.
-                </p>
-              ) : (
+              {form.events.length > 0 && (
                 <ul
                   aria-label="One-off event list"
                   className="mt-4 max-h-80 space-y-2 overflow-y-auto rounded-xl border border-line p-2"
@@ -414,7 +394,7 @@ export default function CalculatorDashboard() {
                     <li
                       key={event.id}
                       aria-label={`Event ${index + 1}`}
-                      className="rounded-lg bg-[#fcfbf9] px-3 py-2"
+                      className="rounded-lg bg-[#fcfbf9] px-3 py-2 [overflow-wrap:anywhere]"
                     >
                       <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
                         <div className="min-w-0">
@@ -431,13 +411,13 @@ export default function CalculatorDashboard() {
                           {currency.format(parseMoneyInput(event.amount))}
                         </p>
                       </div>
-                      <div className="mt-1 flex justify-end gap-2">
+                      <div className="mt-1 flex flex-wrap justify-end gap-2">
                         <button
                           type="button"
                           onClick={() =>
                             setEventEditor({ event, isNew: false })
                           }
-                          className="min-h-11 rounded-md px-3 text-xs font-semibold text-muted hover:text-orange focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange"
+                          className="min-h-11 max-w-full rounded-md px-3 text-xs font-semibold text-muted hover:text-orange focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange"
                         >
                           Edit
                         </button>
@@ -451,7 +431,7 @@ export default function CalculatorDashboard() {
                               ),
                             }))
                           }
-                          className="min-h-11 rounded-md px-3 text-xs font-semibold text-muted hover:text-[#a92f19] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange"
+                          className="min-h-11 max-w-full rounded-md px-3 text-xs font-semibold text-muted hover:text-[#a92f19] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange"
                         >
                           Remove
                         </button>
@@ -472,8 +452,7 @@ export default function CalculatorDashboard() {
                 className="rounded-2xl border border-line bg-white p-8"
                 role="status"
               >
-                <p className="eyebrow">02 / Projection</p>
-                <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em]">
+                <h2 className="text-2xl font-semibold tracking-[-0.04em]">
                   {hasVisibleErrors || calculationError
                     ? "Check your inputs"
                     : "Start your projection"}
@@ -482,7 +461,7 @@ export default function CalculatorDashboard() {
                   {calculationError ??
                     (hasVisibleErrors
                       ? "Enter valid values in all fields to see your projection."
-                      : "Enter your starting balance, average annual investment return, average annual inflation, and monthly withdrawal. Your results will appear here and update as you make changes.")}
+                      : "Complete the inputs to see your projection.")}
                 </p>
               </div>
             ) : (
@@ -505,11 +484,11 @@ export default function CalculatorDashboard() {
                         ? "51+ years"
                         : `${projection.depletionEndYear - 1} full ${projection.depletionEndYear === 2 ? "year" : "years"}`}
                     </output>
-                    <p className="mt-4 text-xs leading-5 text-white/65">
-                      {projection.depletionEndYear === null
-                        ? "Balance stays positive through the model horizon."
-                        : "Full years with a positive closing balance before the first shortfall."}
-                    </p>
+                    {projection.depletionEndYear === null && (
+                      <p className="mt-4 text-xs leading-5 text-white/65">
+                        No shortfall within the projection.
+                      </p>
+                    )}
                   </div>
                   <div className="rounded-2xl border border-line bg-white p-6">
                     <p className="eyebrow">Starting balance</p>
@@ -519,9 +498,6 @@ export default function CalculatorDashboard() {
                     >
                       {currency.format(inputs.startingBalance)}
                     </output>
-                    <p className="mt-4 text-xs leading-5 text-muted">
-                      Your opening amount
-                    </p>
                   </div>
                   {/* Row index 9 closes the tenth year because the first row is Year 0. */}
                   <div className="rounded-2xl border border-line bg-white p-6">
@@ -532,13 +508,7 @@ export default function CalculatorDashboard() {
                     >
                       {currency.format(projection.rows[9].closingBalance)}
                     </output>
-                    <p className="mt-4 text-xs leading-5 text-muted">
-                      Nominal closing balance
-                    </p>
-                    <p className="mt-1 text-xs leading-5 text-muted">
-                      End of projection Year 9
-                    </p>
-                    <p className="mt-1 text-xs leading-5 text-muted">
+                    <p className="mt-3 text-xs leading-5 text-muted">
                       <output aria-label="Balance after 10 years in today's dollars">
                         {currency.format(projection.rows[9].closingTodayValue)}
                       </output>{" "}
@@ -549,23 +519,16 @@ export default function CalculatorDashboard() {
                 <div className="rounded-2xl border border-line bg-white p-5 sm:p-7">
                   <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
                     <div>
-                      <p className="eyebrow">02 / Balance over time</p>
-                      <h2 className="mt-2 text-xl font-semibold tracking-[-0.035em]">
-                        Your projected path
+                      <h2 className="text-xl font-semibold tracking-[-0.035em]">
+                        Balance over time
                       </h2>
                     </div>
-                    <span className="text-xs text-muted">
-                      AUD · year-start balance
-                    </span>
+                    <span className="text-xs text-muted">AUD</span>
                   </div>
                   <BalanceChart
                     rows={projection.rows}
                     depletionEndYear={projection.depletionEndYear}
                   />
-                  <p className="mt-3 text-xs leading-5 text-muted">
-                    Each pair compares the opening balance with its purchasing
-                    power in today&apos;s dollars.
-                  </p>
                 </div>
                 <section
                   className="min-w-0"
@@ -573,10 +536,9 @@ export default function CalculatorDashboard() {
                 >
                   <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
                     <div>
-                      <p className="eyebrow">Year by year</p>
                       <h2
                         id="annual-projection-heading"
-                        className="mt-2 text-xl font-semibold tracking-[-0.035em]"
+                        className="text-xl font-semibold tracking-[-0.035em]"
                       >
                         Annual projection
                       </h2>
@@ -585,10 +547,6 @@ export default function CalculatorDashboard() {
                       51 projected years · all amounts in AUD
                     </span>
                   </div>
-                  <p className="mb-4 text-sm leading-6 text-muted xl:hidden">
-                    Select a year to view its opening balance, withdrawals, and
-                    windfalls.
-                  </p>
                   <ProjectionTable rows={projection.rows} />
                 </section>
               </>

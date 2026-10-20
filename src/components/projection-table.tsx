@@ -57,7 +57,7 @@ export function ProjectionTable({ rows }: { rows: ProjectionRow[] }) {
           Showing years {visibleRows[0]?.year ?? 0}–
           {visibleRows.at(-1)?.year ?? 0}
         </p>
-        <label className="flex items-center gap-3 font-medium">
+        <label className="flex min-w-0 max-w-full flex-wrap items-center gap-3 font-medium">
           Year range
           <select
             value={pageSize}
@@ -65,7 +65,7 @@ export function ProjectionTable({ rows }: { rows: ProjectionRow[] }) {
               setPageSize(Number(event.target.value));
               setPageIndex(0);
             }}
-            className="min-h-11 rounded-lg border border-line bg-white px-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange"
+            className="min-h-11 min-w-0 max-w-full rounded-lg border border-line bg-white px-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange"
           >
             <option value={10}>10-year ranges</option>
             <option value={25}>25-year ranges</option>

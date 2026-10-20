@@ -209,10 +209,12 @@ describe("calculator page", () => {
     );
   });
 
-  it("loads the optional example and explains year indexing", () => {
+  it("loads the optional example with nominal and today's-dollar results", () => {
     renderExample();
     expect(screen.getByText("After 10 years")).toBeInTheDocument();
-    expect(screen.getByText("End of projection Year 9")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Balance after 10 years in today's dollars"),
+    ).toHaveTextContent("$1,062,959.25");
     expect(
       screen.getByLabelText("Nominal balance after 10 years"),
     ).toHaveTextContent("$1,428,528.34");
@@ -245,7 +247,7 @@ describe("calculator page", () => {
         .map((item) => within(item).getByText(/End of Year/).textContent),
     ).toEqual(["End of Year 1", "End of Year 5", "End of Year 9"]);
     expect(
-      screen.queryByRole("textbox", { name: "Projection year" }),
+      screen.queryByRole("textbox", { name: "End of year (0–50)" }),
     ).not.toBeInTheDocument();
     expect(
       screen.getByRole("rowheader", { name: /Year 0/ }),
@@ -264,12 +266,10 @@ describe("calculator page", () => {
       { target: { value: "10000" } },
     );
     await user.click(screen.getByRole("button", { name: "+ Add event" }));
-    const year = screen.getByRole("textbox", { name: "Projection year" });
+    const year = screen.getByRole("textbox", { name: "End of year (0–50)" });
     expect(year).toHaveValue("0");
     expect(year).toHaveAttribute("inputmode", "numeric");
-    expect(year).toHaveAccessibleDescription(
-      "Applied at the end of the selected projection year. Year 0 covers the first 12 months.",
-    );
+    expect(year).not.toHaveAttribute("aria-describedby");
     fireEvent.change(screen.getByRole("textbox", { name: "Amount (AUD)" }), {
       target: { value: "1500" },
     });
@@ -280,9 +280,12 @@ describe("calculator page", () => {
     expect(initialChart.rows[1].lumpSumWindfalls).toBe(0);
 
     await user.click(screen.getByRole("button", { name: "Edit" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "Projection year" }), {
-      target: { value: "1" },
-    });
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "End of year (0–50)" }),
+      {
+        target: { value: "1" },
+      },
+    );
     await user.click(screen.getByRole("button", { name: "Save event" }));
     expectAnnualRow(0, [1350000, 1350000, 120000, 0, 0, 1327178.86]);
     expectAnnualRow(1, [1327178.86, 1288523.16, 123600, 0, 1500, 1300424]);
@@ -438,7 +441,7 @@ describe("calculator page", () => {
       const event = fixture.inputs.events[index];
       await user.click(screen.getByRole("button", { name: "+ Add event" }));
       fireEvent.change(
-        screen.getByRole("textbox", { name: "Projection year" }),
+        screen.getByRole("textbox", { name: "End of year (0–50)" }),
         { target: { value: String(event.endYear - 1) } },
       );
       await user.selectOptions(
@@ -520,7 +523,7 @@ describe("calculator page", () => {
     renderExample();
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
     const year = screen.getAllByRole("textbox", {
-      name: "Projection year",
+      name: "End of year (0–50)",
     })[0];
     const amount = screen.getAllByRole("textbox", {
       name: "Amount (AUD)",

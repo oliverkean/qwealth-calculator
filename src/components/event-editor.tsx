@@ -47,7 +47,6 @@ export function EventEditor({
     <dialog
       ref={dialogRef}
       aria-labelledby="event-editor-heading"
-      aria-describedby="event-editor-hint"
       onKeyDown={(event) => {
         if (
           event.key !== "Tab" ||
@@ -96,17 +95,13 @@ export function EventEditor({
         >
           {isNew ? "Add one-off event" : "Edit one-off event"}
         </h2>
-        <p id="event-editor-hint" className="mt-2 text-sm leading-6 text-muted">
-          Applied at the end of the selected projection year. Year 0 covers the
-          first 12 months.
-        </p>
         <div className="mt-5 grid grid-cols-[110px_minmax(0,1fr)] gap-3">
           <div>
             <label
               htmlFor={yearId}
               className="mb-2 block text-sm font-semibold"
             >
-              Projection year
+              End of year <span className="inline-block">(0–50)</span>
             </label>
             <NumericInput
               id={yearId}
@@ -119,9 +114,7 @@ export function EventEditor({
                 setTouched((current) => ({ ...current, [yearId]: true }))
               }
               error={yearError}
-              descriptionId={
-                yearError ? `${yearId}-error` : "event-editor-hint"
-              }
+              descriptionId={yearError ? `${yearId}-error` : undefined}
               className="event-control"
             />
             {yearError && (
