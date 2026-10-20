@@ -282,7 +282,7 @@ export default function CalculatorDashboard() {
       >
         <div className="mb-6">
           <div className="mb-2 flex items-center gap-3 text-[11px] font-bold uppercase tracking-[0.2em] text-orange">
-            <span className="h-px w-8 bg-orange" /> Retirement planning
+            <span className="h-px w-8 bg-orange" /> Savings projection
           </div>
           <h1 className="text-[clamp(1.875rem,3.5vw,3rem)] font-semibold leading-tight tracking-[-0.045em]">
             How long will your money last?
