@@ -195,8 +195,8 @@ describe("calculator page", () => {
     expectAnnualRow(0, fixture.rows[0]);
     expectAnnualRow(9, fixture.rows[9]);
     expectAnnualRow(50, fixture.rows[50]);
-    expect(screen.getByLabelText("First shortfall year")).toHaveTextContent(
-      "Year 12",
+    expect(screen.getByLabelText("Estimated duration")).toHaveTextContent(
+      "12 full years",
     );
     const updatedChartRows = chartRender.mock.calls.at(-1)?.[0].rows;
     expect(updatedChartRows).not.toEqual(initialChartRows);
@@ -219,9 +219,12 @@ describe("calculator page", () => {
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
       "How long will your money last?",
     );
-    expect(screen.getByLabelText("First shortfall year")).toHaveTextContent(
-      "Year 21",
+    expect(screen.getByLabelText("Estimated duration")).toHaveTextContent(
+      "21 full years",
     );
+    expect(
+      screen.queryByLabelText("First shortfall year"),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "Calculator inputs" }),
     ).toBeInTheDocument();
@@ -336,8 +339,8 @@ describe("calculator page", () => {
     expect(screen.getByText("51+ years")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Load example" }));
     expect(withdrawal).toHaveValue("10,000");
-    expect(screen.getByLabelText("First shortfall year")).toHaveTextContent(
-      "Year 21",
+    expect(screen.getByLabelText("Estimated duration")).toHaveTextContent(
+      "21 full years",
     );
   });
 
@@ -398,10 +401,10 @@ describe("calculator page", () => {
       expect(
         screen.getByLabelText("Nominal balance after 10 years"),
       ).toHaveTextContent(money.format(fixture.rows[9][5]));
-      expect(screen.getByLabelText("First shortfall year")).toHaveTextContent(
+      expect(screen.getByLabelText("Estimated duration")).toHaveTextContent(
         fixture.depletionEndYear === null
-          ? "Not reached"
-          : `Year ${fixture.depletionEndYear - 1}`,
+          ? "51+ years"
+          : `${fixture.depletionEndYear - 1} full ${fixture.depletionEndYear === 2 ? "year" : "years"}`,
       );
       expectAnnualRow(0, fixture.rows[0]);
       expectAnnualRow(9, fixture.rows[9]);

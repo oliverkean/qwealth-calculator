@@ -72,14 +72,10 @@ export default function BalanceChart({ rows, depletionEndYear }: Projection) {
   const [isNarrowChart, setIsNarrowChart] = useState(false);
   const shortfallRow =
     depletionEndYear === null ? undefined : rows[depletionEndYear - 1];
-  const finalRow = rows.at(-1);
-  if (!finalRow) return null;
+  if (rows.length === 0) return null;
   const durationMessage = shortfallRow
     ? `First shortfall: end of Year ${shortfallRow.year}`
     : `Money stays positive through all ${rows.length} projected years`;
-  const hasLaterPositiveBalance =
-    shortfallRow &&
-    rows.some((row) => row.year > shortfallRow.year && row.closingBalance > 0);
 
   return (
     <div
@@ -87,35 +83,6 @@ export default function BalanceChart({ rows, depletionEndYear }: Projection) {
       role="img"
       aria-label={`Column chart of opening balances and their value in today's dollars for Years 0–50. ${durationMessage}. Exact values are in the annual projection table below.`}
     >
-      <div
-        aria-label="Chart duration summary"
-        className={`mb-4 rounded-xl border p-4 text-sm [overflow-wrap:anywhere] ${shortfallRow ? "border-[#ead3c7] bg-[#fff7f0]" : "border-[#d6e3da] bg-[#f1f7f3]"}`}
-      >
-        <p className="font-semibold">{durationMessage}</p>
-        {shortfallRow ? (
-          <>
-            <p className="mt-1 leading-6 text-muted">
-              {shortfallRow.year === 0
-                ? "No full year ends with money remaining."
-                : `${shortfallRow.year} full ${shortfallRow.year === 1 ? "year ends" : "years end"} with money remaining.`}
-            </p>
-            <p className="mt-1 text-xs leading-5 text-muted">
-              Annual estimate, not an exact depletion month.
-            </p>
-            {hasLaterPositiveBalance && (
-              <p className="mt-1 text-xs leading-5 text-muted">
-                Later positive balances do not remove this first shortfall.
-              </p>
-            )}
-          </>
-        ) : (
-          <p className="mt-1 leading-6 text-muted">
-            End of Year {finalRow.year}: {money.format(finalRow.closingBalance)}{" "}
-            ({money.format(finalRow.closingTodayValue)} in today&apos;s
-            dollars). No projection beyond this horizon.
-          </p>
-        )}
-      </div>
       <div className="mb-4 flex flex-wrap gap-x-5 gap-y-2 text-xs leading-5">
         <span className="inline-flex items-center gap-2">
           <span

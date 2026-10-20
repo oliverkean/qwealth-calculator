@@ -80,6 +80,9 @@ describe("opening balance chart", () => {
     expect(screen.getByRole("img")).toHaveAccessibleName(
       /Column chart of opening balances/,
     );
+    expect(
+      screen.queryByLabelText("Chart duration summary"),
+    ).not.toBeInTheDocument();
   });
 
   it("retains zero openings after a shortfall and does not move a final year-end windfall into the opening", () => {
@@ -158,8 +161,8 @@ describe("opening balance chart", () => {
         events: [],
       });
       render(<BalanceChart {...projection} />);
-      expect(screen.getByLabelText("Chart duration summary")).toHaveTextContent(
-        `First shortfall: end of Year ${expectedYear}`,
+      expect(screen.getByRole("img")).toHaveAccessibleName(
+        new RegExp(`First shortfall: end of Year ${expectedYear}\\.`),
       );
       const marker = referenceRender.mock.calls
         .map(([props]) => props)
@@ -179,25 +182,26 @@ describe("opening balance chart", () => {
     },
   );
 
-  it("shows the finite horizon and final purchasing power when savings stay positive", () => {
+  it("describes the finite horizon and exposes final purchasing power in the tooltip when savings stay positive", () => {
     const projection = calculateProjection({
       ...defaultInputs,
       monthlyWithdrawal: 0,
       events: [],
     });
     render(<BalanceChart {...projection} />);
-    const summary = screen.getByLabelText("Chart duration summary");
-    expect(summary).toHaveTextContent(
-      "Money stays positive through all 51 projected years",
+    expect(screen.getByRole("img")).toHaveAccessibleName(
+      /Money stays positive through all 51 projected years/,
     );
-    expect(summary).toHaveTextContent("End of Year 50:");
-    expect(summary).toHaveTextContent(
+    const tooltip = tooltipRender.mock.calls.at(-1)?.[0];
+    render(tooltip.content({ active: true, label: 50 }));
+    expect(
+      screen.getByLabelText("Chart Closing in today's dollars"),
+    ).toHaveTextContent(
       new Intl.NumberFormat("en-AU", {
         style: "currency",
         currency: "AUD",
       }).format(projection.rows[50].closingTodayValue),
     );
-    expect(summary).toHaveTextContent("No projection beyond this horizon.");
     expect(
       referenceRender.mock.calls.some(
         ([props]) => props.className === "first-shortfall-marker",
@@ -214,14 +218,14 @@ describe("opening balance chart", () => {
       events: [{ id: "later", endYear: 4, type: "windfall", amount: 5000 }],
     });
     render(<BalanceChart {...projection} />);
-    expect(screen.getByLabelText("Chart duration summary")).toHaveTextContent(
-      "First shortfall: end of Year 0",
+    expect(screen.getByRole("img")).toHaveAccessibleName(
+      /First shortfall: end of Year 0\./,
     );
     expect(
-      screen.getByText(
-        "Later positive balances do not remove this first shortfall.",
-      ),
-    ).toBeInTheDocument();
+      referenceRender.mock.calls
+        .map(([props]) => props)
+        .find((props) => props.className === "first-shortfall-marker"),
+    ).toMatchObject({ x: 0, position: "end" });
     const tooltip = tooltipRender.mock.calls.at(-1)?.[0];
     render(tooltip.content({ active: true, label: 3 }));
     expect(screen.getByLabelText("Chart Windfalls")).toHaveTextContent(

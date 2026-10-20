@@ -125,10 +125,6 @@ export function ProjectionTable({ rows }: { rows: ProjectionRow[] }) {
           </tbody>
         </table>
       </div>
-      <p className="mt-3 hidden text-xs leading-5 text-muted xl:block">
-        Today&apos;s value is the inflation-adjusted opening balance. Lump sums
-        are one-off withdrawals.
-      </p>
       <div
         className="grid min-w-0 gap-3 sm:grid-cols-2 xl:hidden"
         aria-label="Annual projection by year"

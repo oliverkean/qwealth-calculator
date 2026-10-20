@@ -50,9 +50,9 @@ The workbook has 51 rows, labelled Year 0 through Year 50. Year 0 is the **first
 
 The effective monthly rate is `(1 + annualReturn)^(1/12) - 1`. `FV` assumes the regular withdrawal is taken at the **end** of each month. At a zero monthly rate, the engine uses `openingBalance - regularWithdrawals`, avoiding division by zero. Integer exponents use repeated squaring to match Excel's binary rounding; using JavaScript's general power operation can cross a displayed half-cent boundary for some amounts. No intermediate values are rounded to cents; AUD formatting occurs only in the UI.
 
-The summary labelled After 10 years uses the closing balance at the end of projection Year 9, because Year 0 covers the first twelve months.
+The summary has three cards: Estimated duration, Starting balance, and After 10 years. Estimated duration counts full years with a positive closing balance before the first shortfall; the chart shows the shortfall year. The summary labelled After 10 years uses the closing balance at the end of projection Year 9, because Year 0 covers the first twelve months.
 
-The chart uses paired columns for the opening balance and its today's-dollar value, matching columns C and D. It plots exactly the 51 projection rows, labelled Years 0–50, without an extra starting point. A dashed marker identifies the end of the first year with a zero or negative close. A compact chart summary explains the duration or finite projection horizon; later positive balances do not erase an earlier shortfall. Tooltips show both opening and closing balances, regular withdrawals, and nonzero one-off events. The chart does not estimate an exact depletion month.
+The chart uses paired columns for the opening balance and its today's-dollar value, matching columns C and D. It plots exactly the 51 projection rows, labelled Years 0–50, without an extra starting point. A dashed marker identifies the end of the first year with a zero or negative close. The chart has no separate duration summary box. Its accessible description reports the first shortfall or survival through the 51-year horizon; later positive balances do not erase an earlier shortfall. Tooltips show both opening and closing balances, regular withdrawals, and nonzero one-off events. The chart does not estimate an exact depletion month.
 
 ### Non-obvious Excel behavior preserved
 

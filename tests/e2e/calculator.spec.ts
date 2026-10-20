@@ -196,14 +196,16 @@ test("chart columns and tooltips follow the table's opening balances and project
   });
 });
 
-test("chart explains first shortfall, exact zero, later funds, and the finite horizon", async ({
+test("chart retains shortfall markers, exact zero, later funds, and the finite horizon without a summary box", async ({
   page,
 }, testInfo) => {
   await page.getByRole("button", { name: "Load example", exact: true }).click();
   const chart = await expectChart(page);
-  const summary = page.getByLabel("Chart duration summary", { exact: true });
+  await expect(
+    page.getByLabel("Chart duration summary", { exact: true }),
+  ).toHaveCount(0);
   const marker = chart.locator(".first-shortfall-marker");
-  await expect(summary).toContainText("First shortfall: end of Year 21");
+  await expect(chart).toHaveAccessibleName(/First shortfall: end of Year 21\./);
   await expect(marker).toHaveCount(1);
   const surface = chart.locator("svg.recharts-surface");
   const tooltip = chart.locator(".recharts-tooltip-wrapper");
@@ -232,10 +234,9 @@ test("chart explains first shortfall, exact zero, later funds, and the finite ho
   await page
     .getByRole("textbox", { name: "Monthly withdrawal", exact: true })
     .fill("0");
-  await expect(summary).toContainText(
-    "Money stays positive through all 51 projected years",
+  await expect(chart).toHaveAccessibleName(
+    /Money stays positive through all 51 projected years/,
   );
-  await expect(summary).toContainText("No projection beyond this horizon.");
   await expect(marker).toHaveCount(0);
 
   await page.getByRole("button", { name: "Clear", exact: true }).click();
@@ -245,7 +246,7 @@ test("chart explains first shortfall, exact zero, later funds, and the finite ho
     annualReturn: 0,
     annualInflation: 0,
   });
-  await expect(summary).toContainText("First shortfall: end of Year 0");
+  await expect(chart).toHaveAccessibleName(/First shortfall: end of Year 0\./);
   await expect(marker.locator("line")).toHaveAttribute("stroke-width", "2");
   await expect(chart.getByText("Year 0 end", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "+ Add event", exact: true }).click();
@@ -256,10 +257,9 @@ test("chart explains first shortfall, exact zero, later funds, and the finite ho
     .getByRole("textbox", { name: "Amount (AUD)", exact: true })
     .fill("5000");
   await page.getByRole("button", { name: "Save event", exact: true }).click();
-  await expect(summary).toContainText("First shortfall: end of Year 0");
-  await expect(summary).toContainText(
-    "Later positive balances do not remove this first shortfall.",
-  );
+  await expect(chart).toHaveAccessibleName(/First shortfall: end of Year 0\./);
+  await expect(marker).toHaveCount(1);
+  await expectClosing(page, 3, 5000);
 
   await page.getByRole("button", { name: "Clear", exact: true }).click();
   await fillInputs(page, {
@@ -268,7 +268,7 @@ test("chart explains first shortfall, exact zero, later funds, and the finite ho
     annualReturn: 0,
     annualInflation: 0,
   });
-  await expect(summary).toContainText("First shortfall: end of Year 50");
+  await expect(chart).toHaveAccessibleName(/First shortfall: end of Year 50\./);
   await expect(marker.locator("line")).toHaveAttribute("stroke-width", "2");
   const finalLabel = chart.getByText("Year 50 end", { exact: true });
   await expect(finalLabel).toBeVisible();
@@ -397,7 +397,9 @@ test("fresh client values produce all annual rows and a real chart without overf
       fixture.rows[9][5] / (1 + fixture.inputs.annualInflation) ** 10,
     ),
   );
-  await expect(page.getByLabel("First shortfall year")).toHaveText("Year 12");
+  await expect(
+    page.getByLabel("Estimated duration", { exact: true }),
+  ).toHaveText("12 full years");
   const chart = await expectChart(page);
   await expect
     .poll(() =>
@@ -451,7 +453,10 @@ test("Load example is optional and Clear removes all values, events, and results
     page,
     fixtures.find((item) => item.name === "Default")!.rows,
   );
-  await expect(page.getByLabel("First shortfall year")).toHaveText("Year 21");
+  await expect(
+    page.getByLabel("Estimated duration", { exact: true }),
+  ).toHaveText("21 full years");
+  await expect(page.getByLabel("First shortfall year")).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Remove", exact: true }),
   ).toHaveCount(3);
@@ -501,10 +506,12 @@ test("each main input updates displayed amounts and the actual chart columns", a
           .evaluateAll((paths) => paths.map((path) => path.getAttribute("d"))),
       )
       .not.toEqual(previousColumns);
-    await expect(page.getByLabel("First shortfall year")).toHaveText(
+    await expect(
+      page.getByLabel("Estimated duration", { exact: true }),
+    ).toHaveText(
       fixture.depletionEndYear === null
-        ? "Not reached"
-        : `Year ${fixture.depletionEndYear - 1}`,
+        ? "51+ years"
+        : `${fixture.depletionEndYear - 1} full ${fixture.depletionEndYear === 2 ? "year" : "years"}`,
     );
   }
 });
@@ -640,7 +647,9 @@ test("invalid main fields hide results and recover after correction", async ({
     await expect(page.getByRole("img", { name: chartName })).toHaveCount(0);
     await input.fill(original);
     await expect(input).toHaveAttribute("aria-invalid", "false");
-    await expect(page.getByLabel("First shortfall year")).toHaveText("Year 21");
+    await expect(
+      page.getByLabel("Estimated duration", { exact: true }),
+    ).toHaveText("21 full years");
   }
 });
 
@@ -700,7 +709,9 @@ test("zero return and exact depletion remain finite and numeric overflow is expl
   )!;
   await fillInputs(page, fixture.inputs);
   await expectRows(page, fixture.rows);
-  await expect(page.getByLabel("First shortfall year")).toHaveText("Year 0");
+  await expect(
+    page.getByLabel("Estimated duration", { exact: true }),
+  ).toHaveText("0 full years");
   await expectChart(page);
   await page
     .getByRole("textbox", { name: "Starting balance", exact: true })

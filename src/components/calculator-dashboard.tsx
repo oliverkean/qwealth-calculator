@@ -487,13 +487,13 @@ export default function CalculatorDashboard() {
               </div>
             ) : (
               <>
-                {/* A one-based depletion end-year becomes a zero-based shortfall label and a count of prior positive years. */}
+                {/* Duration counts full years with a positive closing balance before the first shortfall. */}
                 <div
-                  className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4"
+                  className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3"
                   role="group"
                   aria-label="Projection summary"
                 >
-                  <div className="rounded-2xl bg-ink p-6 text-white">
+                  <div className="rounded-2xl bg-ink p-6 text-white sm:col-span-2 2xl:col-span-1">
                     <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/60">
                       Estimated duration
                     </p>
@@ -503,28 +503,12 @@ export default function CalculatorDashboard() {
                     >
                       {projection.depletionEndYear === null
                         ? "51+ years"
-                        : `${projection.depletionEndYear - 1} years`}
+                        : `${projection.depletionEndYear - 1} full ${projection.depletionEndYear === 2 ? "year" : "years"}`}
                     </output>
                     <p className="mt-4 text-xs leading-5 text-white/65">
                       {projection.depletionEndYear === null
                         ? "Balance stays positive through the model horizon."
                         : "Full years with a positive closing balance before the first shortfall."}
-                    </p>
-                  </div>
-                  <div className="rounded-2xl border border-line bg-white p-6">
-                    <p className="eyebrow">First shortfall</p>
-                    <output
-                      aria-label="First shortfall year"
-                      className="mt-4 block text-[clamp(1.5rem,2.4vw,2.25rem)] font-semibold leading-none tracking-[-0.055em]"
-                    >
-                      {projection.depletionEndYear === null
-                        ? "Not reached"
-                        : `Year ${projection.depletionEndYear - 1}`}
-                    </output>
-                    <p className="mt-4 text-xs leading-5 text-muted">
-                      {projection.depletionEndYear === null
-                        ? "Your balance stays positive across all 51 projected years."
-                        : `End of the ${projection.depletionEndYear}-year period. The projection starts at Year 0.`}
                     </p>
                   </div>
                   <div className="rounded-2xl border border-line bg-white p-6">
@@ -606,11 +590,6 @@ export default function CalculatorDashboard() {
                     windfalls.
                   </p>
                   <ProjectionTable rows={projection.rows} />
-                  <p className="mt-4 text-sm leading-6 text-muted">
-                    Year 0 covers the first 12 months. A negative closing
-                    balance shows a shortfall; the next year starts at zero.
-                    One-off events are applied at the end of the selected year.
-                  </p>
                 </section>
               </>
             )}
