@@ -28,7 +28,7 @@ const columns = [
     heading: "Lump sums Withdrawals",
     label: "Lump-sum withdrawals",
   },
-  { key: "lumpSumWindfalls", heading: "Windfalls", label: "Windfalls" },
+  { key: "lumpSumWindfalls", heading: "Lump sums Windfalls", label: "Windfalls" },
   { key: "closingBalance", heading: "Closing", label: "Closing balance" },
 ] as const;
 
