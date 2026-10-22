@@ -25,7 +25,7 @@ const columns = [
   },
   {
     key: "lumpSumWithdrawals",
-    heading: "Lump sums",
+    heading: "Lump sums Withdrawals",
     label: "Lump-sum withdrawals",
   },
   { key: "lumpSumWindfalls", heading: "Windfalls", label: "Windfalls" },
