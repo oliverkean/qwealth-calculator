@@ -86,9 +86,3 @@ The original confidential PDF and workbook remain outside this repository. Do **
 2. Push this source repository to GitHub, excluding the confidential source documents.
 3. In Vercel, import the GitHub repository and choose the repository root. Use the detected Next.js settings and `npm run build`.
 4. No environment variables or database are required. After deployment, test the default scenario and a changed input at the public URL.
-
-The deployment is complete only when Vercel returns a working public URL. A local production build is not a deployment.
-
-## Model limits
-
-This deterministic projection assumes a constant annual return and inflation rate; it does not model market volatility, tax, fees, or changing withdrawal behavior.
